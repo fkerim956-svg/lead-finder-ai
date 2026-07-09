@@ -145,24 +145,17 @@ export default function FavoritesPage() {
               </p>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="table-pop min-w-[1560px]">
+            <div className="hidden md:block">
+              <table className="table-pop w-full table-fixed">
                 <thead>
                   <tr>
-                    <th className="text-left">İşletme</th>
-                    <th className="text-left">Kategori</th>
-                    <th className="text-left">Konum</th>
+                    <th className="w-[28%] text-left">İşletme</th>
                     <th className="text-left">Puan</th>
                     <th className="text-left">Yorum</th>
-                    <th className="text-left">Web Sitesi</th>
-                    <th className="text-left">Telefon</th>
                     <th className="text-left">Fırsat Skoru</th>
                     <th className="text-left">Yorum Kart Skoru</th>
-                    <th className="text-left">Not</th>
-                    <th className="text-left">Etiket</th>
-                    <th className="text-left">Harita</th>
-                    <th className="text-left">Mesaj</th>
-                    <th className="text-left">İşlem</th>
+                    <th className="w-[16%] text-left">Etiket</th>
+                    <th className="w-[22%] text-left">Aksiyonlar</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -171,94 +164,115 @@ export default function FavoritesPage() {
 
                     return (
                       <tr key={`${business.businessName}-${business.location}`}>
-                        <td className="font-extrabold">{business.businessName}</td>
-                        <td>{business.category}</td>
-                        <td>{business.location}</td>
-                        <td>{business.rating.toFixed(1)}</td>
+                        <td>
+                          <FavoriteBusinessSummary business={business} />
+                        </td>
+                        <td className="font-extrabold">
+                          {business.rating.toFixed(1)}
+                        </td>
                         <td>{business.reviewCount}</td>
-                        <td>
-                          <StatusBadge active={business.hasWebsite} />
-                        </td>
-                        <td>
-                          <StatusBadge active={business.hasPhone} />
-                        </td>
                         <td>
                           <span className="badge-pop bg-[#FBBF24]">
                             ⭐ {business.leadScore}/100
                           </span>
                         </td>
                         <td>
-                          <div className="flex flex-col gap-1">
-                            <span className="badge-pop bg-[#EDE9FE]">
-                              {reviewCardScore}/100
-                            </span>
-                            <span className="text-xs font-extrabold text-slate-500">
-                              {getReviewCardFitLabel(reviewCardScore)}
-                            </span>
-                          </div>
+                          <ReviewCardBadge score={reviewCardScore} />
                         </td>
                         <td>
-                          <textarea
-                            value={business.note ?? ""}
-                            onChange={(event) =>
-                              handleUpdateFavorite(business, {
-                                note: event.target.value,
-                              })
+                          <TagSelect
+                            value={business.tag ?? "Etiket yok"}
+                            onChange={(tag) =>
+                              handleUpdateFavorite(business, { tag })
                             }
-                            placeholder="Not ekle"
-                            className="input-pop min-h-24 w-60"
                           />
                         </td>
                         <td>
-                          <select
-                            value={business.tag ?? "Etiket yok"}
-                            onChange={(event) =>
-                              handleUpdateFavorite(business, {
-                                tag: event.target.value,
-                              })
-                            }
-                            className="input-pop w-52"
-                          >
-                            {tagOptions.map((tag) => (
-                              <option key={tag} value={tag}>
-                                {tag}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <a
-                            href={business.mapsUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="btn-ghost min-h-10 px-3"
-                          >
-                            Aç
-                          </a>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => handleCreateMessage(business)}
-                            className="btn-secondary min-h-10 px-3 text-xs"
-                          >
-                            Mesaj Oluştur
-                          </button>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFavorite(business)}
-                            className="btn-danger min-h-10 px-3 text-xs"
-                          >
-                            Favoriden Çıkar
-                          </button>
+                          <FavoriteActions
+                            business={business}
+                            onCreateMessage={handleCreateMessage}
+                            onRemoveFavorite={handleRemoveFavorite}
+                          />
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+
+            <div className="grid gap-4 p-4 md:hidden">
+              {favorites.map((business) => {
+                const reviewCardScore = getReviewCardScore(business);
+
+                return (
+                  <article
+                    key={`${business.businessName}-${business.location}`}
+                    className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]"
+                  >
+                    <FavoriteBusinessSummary business={business} large />
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <MetricBadge label="Puan" value={business.rating.toFixed(1)} />
+                      <MetricBadge
+                        label="Yorum"
+                        value={String(business.reviewCount)}
+                      />
+                      <MetricBadge
+                        label="Fırsat Skoru"
+                        value={`⭐ ${business.leadScore}/100`}
+                      />
+                      <MetricBadge
+                        label="Yorum Kart"
+                        value={`${reviewCardScore}/100`}
+                        helper={getReviewCardFitLabel(reviewCardScore)}
+                      />
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <StatusBadge active={business.hasWebsite} label="Web Sitesi" />
+                      <StatusBadge active={business.hasPhone} label="Telefon" />
+                    </div>
+
+                    <div className="mt-4 grid gap-3">
+                      <label className="grid gap-2">
+                        <span className="text-sm font-black text-[#1E293B]">
+                          Etiket
+                        </span>
+                        <TagSelect
+                          value={business.tag ?? "Etiket yok"}
+                          onChange={(tag) =>
+                            handleUpdateFavorite(business, { tag })
+                          }
+                        />
+                      </label>
+
+                      <label className="grid gap-2">
+                        <span className="text-sm font-black text-[#1E293B]">
+                          Özel Not Defteri
+                        </span>
+                        <textarea
+                          value={business.note ?? ""}
+                          onChange={(event) =>
+                            handleUpdateFavorite(business, {
+                              note: event.target.value,
+                            })
+                          }
+                          placeholder="Satış notu ekle"
+                          className="input-pop min-h-28"
+                        />
+                      </label>
+
+                      <FavoriteActions
+                        business={business}
+                        onCreateMessage={handleCreateMessage}
+                        onRemoveFavorite={handleRemoveFavorite}
+                        stacked
+                      />
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
@@ -309,9 +323,129 @@ export default function FavoritesPage() {
   );
 }
 
-function StatusBadge({ active }: { active: boolean }) {
+function FavoriteBusinessSummary({
+  business,
+  large = false,
+}: {
+  business: FavoriteBusiness;
+  large?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <h3
+        className={`font-heading font-black text-[#1E293B] ${
+          large ? "text-xl" : "text-base"
+        }`}
+      >
+        {business.businessName}
+      </h3>
+      <p className="text-sm font-bold text-slate-600">
+        {business.category} • {business.location}
+      </p>
+      <div className="flex flex-wrap gap-2 pt-1">
+        <StatusBadge active={business.hasWebsite} label="Web" />
+        <StatusBadge active={business.hasPhone} label="Telefon" />
+      </div>
+    </div>
+  );
+}
+
+function FavoriteActions({
+  business,
+  onCreateMessage,
+  onRemoveFavorite,
+  stacked = false,
+}: {
+  business: FavoriteBusiness;
+  onCreateMessage: (business: FavoriteBusiness) => void;
+  onRemoveFavorite: (business: FavoriteBusiness) => void;
+  stacked?: boolean;
+}) {
+  return (
+    <div className={`flex gap-2 ${stacked ? "flex-col" : "flex-wrap"}`}>
+      <a
+        href={business.mapsUrl}
+        target="_blank"
+        rel="noreferrer"
+        className={`${stacked ? "w-full" : ""} btn-ghost min-h-11 px-3`}
+      >
+        Google Maps
+      </a>
+      <button
+        type="button"
+        onClick={() => onCreateMessage(business)}
+        className={`${stacked ? "w-full" : ""} btn-secondary min-h-11 px-3 text-xs`}
+      >
+        Mesaj Oluştur
+      </button>
+      <button
+        type="button"
+        onClick={() => onRemoveFavorite(business)}
+        className={`${stacked ? "w-full" : ""} btn-danger min-h-11 px-3 text-xs`}
+      >
+        Favoriden Çıkar
+      </button>
+    </div>
+  );
+}
+
+function TagSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (tag: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="input-pop w-full"
+    >
+      {tagOptions.map((tag) => (
+        <option key={tag} value={tag}>
+          {tag}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function ReviewCardBadge({ score }: { score: number }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="badge-pop bg-[#EDE9FE]">{score}/100</span>
+      <span className="text-xs font-extrabold text-slate-500">
+        {getReviewCardFitLabel(score)}
+      </span>
+    </div>
+  );
+}
+
+function MetricBadge({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper?: string;
+}) {
+  return (
+    <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
+      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-black text-[#1E293B]">{value}</p>
+      {helper ? (
+        <p className="mt-1 text-xs font-extrabold text-slate-500">{helper}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusBadge({ active, label }: { active: boolean; label?: string }) {
   return (
     <span className={`badge-pop ${active ? "bg-[#34D399]" : "bg-[#FBBF24]"}`}>
+      {label ? `${label}: ` : ""}
       {active ? "Var" : "Yok"}
     </span>
   );

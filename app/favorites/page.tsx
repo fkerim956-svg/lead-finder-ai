@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import {
   calculateReviewCardScore,
@@ -13,6 +13,9 @@ type FavoriteBusiness = BusinessResult & {
   note?: string;
   tag?: string;
 };
+
+type SortColumn = "rating" | "reviewCount" | "leadScore" | "reviewCardScore";
+type SortDirection = "asc" | "desc";
 
 const tagOptions = [
   "Etiket yok",
@@ -69,8 +72,20 @@ Biz işletmeler için Google yorumlarını artırma, NFC yorum kartları, Google
 
 export default function FavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteBusiness[]>(getFavorites);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("leadScore");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedMessage, setSelectedMessage] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const sortedFavorites = useMemo(() => {
+    return [...favorites].sort((firstBusiness, secondBusiness) => {
+      const firstValue = getSortValue(firstBusiness, sortColumn);
+      const secondValue = getSortValue(secondBusiness, sortColumn);
+      const directionMultiplier = sortDirection === "asc" ? 1 : -1;
+
+      return (firstValue - secondValue) * directionMultiplier;
+    });
+  }, [favorites, sortColumn, sortDirection]);
 
   function saveFavorites(updatedFavorites: FavoriteBusiness[]) {
     setFavorites(updatedFavorites);
@@ -105,6 +120,18 @@ export default function FavoritesPage() {
   function handleCreateMessage(business: FavoriteBusiness) {
     setSelectedMessage(createSalesMessage(business));
     setCopied(false);
+  }
+
+  function handleSort(nextColumn: SortColumn) {
+    if (nextColumn === sortColumn) {
+      setSortDirection((currentDirection) =>
+        currentDirection === "asc" ? "desc" : "asc",
+      );
+      return;
+    }
+
+    setSortColumn(nextColumn);
+    setSortDirection("asc");
   }
 
   async function handleCopyMessage() {
@@ -150,16 +177,40 @@ export default function FavoritesPage() {
                 <thead>
                   <tr>
                     <th className="w-[28%] text-left">İşletme</th>
-                    <th className="text-left">Puan</th>
-                    <th className="text-left">Yorum</th>
-                    <th className="text-left">Fırsat Skoru</th>
-                    <th className="text-left">Yorum Kart Skoru</th>
+                    <SortableHeader
+                      label="Puan"
+                      column="rating"
+                      activeColumn={sortColumn}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Yorum"
+                      column="reviewCount"
+                      activeColumn={sortColumn}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Fırsat Skoru"
+                      column="leadScore"
+                      activeColumn={sortColumn}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Yorum Kart Skoru"
+                      column="reviewCardScore"
+                      activeColumn={sortColumn}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
                     <th className="w-[16%] text-left">Etiket</th>
                     <th className="w-[22%] text-left">Aksiyonlar</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {favorites.map((business) => {
+                  {sortedFavorites.map((business) => {
                     const reviewCardScore = getReviewCardScore(business);
 
                     return (
@@ -202,7 +253,41 @@ export default function FavoritesPage() {
             </div>
 
             <div className="grid gap-4 p-4 md:hidden">
-              {favorites.map((business) => {
+              <div className="rounded-[22px] border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
+                <p className="text-sm font-black text-[#1E293B]">Sırala</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <MobileSortButton
+                    label="Puan"
+                    column="rating"
+                    activeColumn={sortColumn}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <MobileSortButton
+                    label="Yorum"
+                    column="reviewCount"
+                    activeColumn={sortColumn}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <MobileSortButton
+                    label="Fırsat"
+                    column="leadScore"
+                    activeColumn={sortColumn}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <MobileSortButton
+                    label="Yorum Kart"
+                    column="reviewCardScore"
+                    activeColumn={sortColumn}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                </div>
+              </div>
+
+              {sortedFavorites.map((business) => {
                 const reviewCardScore = getReviewCardScore(business);
 
                 return (
@@ -320,6 +405,86 @@ export default function FavoritesPage() {
         </div>
       ) : null}
     </AppShell>
+  );
+}
+
+function getSortValue(business: FavoriteBusiness, column: SortColumn): number {
+  if (column === "rating") {
+    return business.rating;
+  }
+
+  if (column === "reviewCount") {
+    return business.reviewCount;
+  }
+
+  if (column === "reviewCardScore") {
+    return getReviewCardScore(business);
+  }
+
+  return business.leadScore;
+}
+
+function SortableHeader({
+  label,
+  column,
+  activeColumn,
+  direction,
+  onSort,
+}: {
+  label: string;
+  column: SortColumn;
+  activeColumn: SortColumn;
+  direction: SortDirection;
+  onSort: (column: SortColumn) => void;
+}) {
+  const isActive = activeColumn === column;
+  const indicator = isActive ? ` ${direction === "asc" ? "↑" : "↓"}` : "";
+
+  return (
+    <th className="text-left">
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        className="rounded-full px-2 py-1 text-left font-black transition hover:bg-[#FBBF24] focus:outline-none focus:ring-4 focus:ring-[#8B5CF6]/30"
+        aria-label={`${label} sütununa göre sırala`}
+        title={`${label} sütununa göre sırala`}
+      >
+        {label}
+        {indicator}
+      </button>
+    </th>
+  );
+}
+
+function MobileSortButton({
+  label,
+  column,
+  activeColumn,
+  direction,
+  onSort,
+}: {
+  label: string;
+  column: SortColumn;
+  activeColumn: SortColumn;
+  direction: SortDirection;
+  onSort: (column: SortColumn) => void;
+}) {
+  const isActive = activeColumn === column;
+  const indicator = isActive ? ` ${direction === "asc" ? "↑" : "↓"}` : "";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      className={`min-h-11 rounded-full border-2 border-[#1E293B] px-3 py-2 text-sm font-black shadow-[3px_3px_0_#1E293B] transition hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0_#1E293B] focus:outline-none focus:ring-4 focus:ring-[#8B5CF6]/30 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[1px_1px_0_#1E293B] ${
+        isActive ? "bg-[#8B5CF6] text-white" : "bg-white text-[#1E293B]"
+      }`}
+      aria-label={`${label} sıralaması`}
+      title={`${label} sıralaması`}
+    >
+      {label}
+      {indicator}
+    </button>
   );
 }
 

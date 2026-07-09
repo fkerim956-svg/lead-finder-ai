@@ -268,7 +268,6 @@ export default function ResultsPage() {
     setPhoneAvailableOnly(false);
     setExcludeReviewCardSubscribers(false);
     setSelectedCategory(allCategoriesOption);
-    setRatingUnderOnly(false);
     setSortBy("leadScore");
     setSortDirection("desc");
   }

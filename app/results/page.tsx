@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
@@ -15,7 +15,8 @@ import {
 } from "@/lib/storage-keys";
 import type { BusinessResult, LatestAnalysis } from "@/types/business";
 
-type SortOption = "leadScore" | "rating" | "reviewCount";
+type SortOption = "leadScore" | "rating" | "reviewCount" | "reviewCardScore";
+type SortDirection = "asc" | "desc";
 
 const allCategoriesOption = "Tüm kategoriler";
 
@@ -165,19 +166,14 @@ export default function ResultsPage() {
       return [];
     }
   });
-  const [minimumLeadScore, setMinimumLeadScore] = useState(0);
-  const [minimumRating, setMinimumRating] = useState("");
-  const [maximumRating, setMaximumRating] = useState("");
-  const [minimumReviewCount, setMinimumReviewCount] = useState("");
-  const [maximumReviewCount, setMaximumReviewCount] = useState("");
-  const [minimumReviewCardScore, setMinimumReviewCardScore] = useState(0);
   const [websiteMissingOnly, setWebsiteMissingOnly] = useState(false);
   const [phoneAvailableOnly, setPhoneAvailableOnly] = useState(false);
   const [excludeReviewCardSubscribers, setExcludeReviewCardSubscribers] =
     useState(false);
   const [selectedCategory, setSelectedCategory] = useState(allCategoriesOption);
-  const [ratingUnderOnly, setRatingUnderOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("leadScore");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessResult | null>(null);
 
   const businessesWithScore = useMemo<BusinessResult[]>(() => {
@@ -199,26 +195,11 @@ export default function ResultsPage() {
   }, [reviewCardSubscribers]);
 
   const filteredBusinesses = useMemo(() => {
-    const minRating = minimumRating ? Number(minimumRating) : null;
-    const maxRating = maximumRating ? Number(maximumRating) : null;
-    const minReviews = minimumReviewCount ? Number(minimumReviewCount) : null;
-    const maxReviews = maximumReviewCount ? Number(maximumReviewCount) : null;
-
     return businessesWithScore
       .filter((business) =>
         selectedCategory === allCategoriesOption
           ? true
           : business.category === selectedCategory,
-      )
-      .filter((business) => business.leadScore >= minimumLeadScore)
-      .filter((business) => getReviewCardScore(business) >= minimumReviewCardScore)
-      .filter((business) => (minRating === null ? true : business.rating >= minRating))
-      .filter((business) => (maxRating === null ? true : business.rating <= maxRating))
-      .filter((business) =>
-        minReviews === null ? true : business.reviewCount >= minReviews,
-      )
-      .filter((business) =>
-        maxReviews === null ? true : business.reviewCount <= maxReviews,
       )
       .filter((business) => (websiteMissingOnly ? !business.hasWebsite : true))
       .filter((business) => (phoneAvailableOnly ? business.hasPhone : true))
@@ -227,32 +208,30 @@ export default function ResultsPage() {
           ? !reviewCardSubscriberKeys.has(getBusinessKey(business))
           : true,
       )
-      .filter((business) => (ratingUnderOnly ? business.rating < 4.2 : true))
       .toSorted((first, second) => {
+        const directionMultiplier = sortDirection === "asc" ? 1 : -1;
+        let difference = 0;
+
         if (sortBy === "rating") {
-          return first.rating - second.rating;
+          difference = first.rating - second.rating;
+        } else if (sortBy === "reviewCount") {
+          difference = first.reviewCount - second.reviewCount;
+        } else if (sortBy === "reviewCardScore") {
+          difference = getReviewCardScore(first) - getReviewCardScore(second);
+        } else {
+          difference = first.leadScore - second.leadScore;
         }
 
-        if (sortBy === "reviewCount") {
-          return second.reviewCount - first.reviewCount;
-        }
-
-        return second.leadScore - first.leadScore;
+        return difference * directionMultiplier;
       });
   }, [
     businessesWithScore,
     excludeReviewCardSubscribers,
-    maximumRating,
-    maximumReviewCount,
-    minimumLeadScore,
-    minimumRating,
-    minimumReviewCardScore,
-    minimumReviewCount,
     phoneAvailableOnly,
-    ratingUnderOnly,
     reviewCardSubscriberKeys,
     selectedCategory,
     sortBy,
+    sortDirection,
     websiteMissingOnly,
   ]);
 
@@ -285,18 +264,25 @@ export default function ResultsPage() {
   }
 
   function handleClearFilters() {
-    setMinimumLeadScore(0);
-    setMinimumRating("");
-    setMaximumRating("");
-    setMinimumReviewCount("");
-    setMaximumReviewCount("");
-    setMinimumReviewCardScore(0);
     setWebsiteMissingOnly(false);
     setPhoneAvailableOnly(false);
     setExcludeReviewCardSubscribers(false);
     setSelectedCategory(allCategoriesOption);
     setRatingUnderOnly(false);
     setSortBy("leadScore");
+    setSortDirection("desc");
+  }
+
+  function handleSort(nextSortBy: SortOption) {
+    if (sortBy === nextSortBy) {
+      setSortDirection((currentDirection) =>
+        currentDirection === "asc" ? "desc" : "asc",
+      );
+      return;
+    }
+
+    setSortBy(nextSortBy);
+    setSortDirection("asc");
   }
 
   function escapeCsvValue(value: string | number | boolean): string {
@@ -378,12 +364,13 @@ export default function ResultsPage() {
     return reviewCardSubscriberKeys.has(getBusinessKey(business));
   }
 
-  function handleAddReviewCardSubscriber(business: BusinessResult) {
-    if (isReviewCardSubscriber(business)) {
-      return;
-    }
-
-    const updatedSubscribers = [...reviewCardSubscribers, business];
+  function handleToggleReviewCardSubscriber(business: BusinessResult) {
+    const isSubscriber = isReviewCardSubscriber(business);
+    const updatedSubscribers = isSubscriber
+      ? reviewCardSubscribers.filter(
+          (subscriber) => getBusinessKey(subscriber) !== getBusinessKey(business),
+        )
+      : [...reviewCardSubscribers, business];
 
     setReviewCardSubscribers(updatedSubscribers);
     window.localStorage.setItem(
@@ -444,131 +431,72 @@ export default function ResultsPage() {
           />
         </section>
 
-        <section className="card-pop grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
-          <FilterField label="Kategori">
-            <select
-              value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
-              className="input-pop"
-            >
-              {categoryOptions.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          </FilterField>
+        <section className="card-pop overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setIsFilterPanelOpen((isOpen) => !isOpen)}
+            aria-expanded={isFilterPanelOpen}
+            className="flex w-full flex-col gap-3 border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4 text-left transition hover:bg-[#FBBF24] sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <h2 className="font-heading text-xl font-black text-[#1E293B]">
+                Filtrele
+              </h2>
+              <p className="mt-1 text-sm font-bold text-slate-600">
+                Kategori ve temel görünürlük filtreleri.
+              </p>
+            </div>
+            <span className="badge-pop bg-white">
+              {isFilterPanelOpen ? "Kapat" : "Aç"}
+            </span>
+          </button>
 
-          <FilterField label="Minimum puan">
-            <input
-              type="number"
-              min={0}
-              max={5}
-              step={0.1}
-              value={minimumRating}
-              onChange={(event) => setMinimumRating(event.target.value)}
-              className="input-pop"
-            />
-          </FilterField>
+          {isFilterPanelOpen ? (
+            <div className="grid gap-5 p-5">
+              <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+                <FilterField label="Kategori">
+                  <select
+                    value={selectedCategory}
+                    onChange={(event) => setSelectedCategory(event.target.value)}
+                    className="input-pop"
+                  >
+                    {categoryOptions.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </FilterField>
 
-          <FilterField label="Maksimum puan">
-            <input
-              type="number"
-              min={0}
-              max={5}
-              step={0.1}
-              value={maximumRating}
-              onChange={(event) => setMaximumRating(event.target.value)}
-              className="input-pop"
-            />
-          </FilterField>
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="btn-secondary w-full md:w-auto"
+                >
+                  Filtreleri Temizle
+                </button>
+              </div>
 
-          <FilterField label="Minimum yorum sayısı">
-            <input
-              type="number"
-              min={0}
-              value={minimumReviewCount}
-              onChange={(event) => setMinimumReviewCount(event.target.value)}
-              className="input-pop"
-            />
-          </FilterField>
-
-          <FilterField label="Maksimum yorum sayısı">
-            <input
-              type="number"
-              min={0}
-              value={maximumReviewCount}
-              onChange={(event) => setMaximumReviewCount(event.target.value)}
-              className="input-pop"
-            />
-          </FilterField>
-
-          <FilterField label="Minimum fırsat skoru">
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={minimumLeadScore}
-              onChange={(event) => setMinimumLeadScore(Number(event.target.value))}
-              className="input-pop"
-            />
-          </FilterField>
-
-          <FilterField label="Minimum yorum kart skoru">
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={minimumReviewCardScore}
-              onChange={(event) =>
-                setMinimumReviewCardScore(Number(event.target.value))
-              }
-              className="input-pop"
-            />
-          </FilterField>
-
-          <FilterField label="Sıralama">
-            <select
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as SortOption)}
-              className="input-pop"
-            >
-              <option value="leadScore">En yüksek fırsat skoru önce</option>
-              <option value="rating">En düşük puan önce</option>
-              <option value="reviewCount">En çok yorum önce</option>
-            </select>
-          </FilterField>
-
-          <div className="flex flex-col justify-end gap-3 xl:col-span-3">
-            <CheckboxField
-              checked={websiteMissingOnly}
-              onChange={setWebsiteMissingOnly}
-              label="Yalnızca web sitesi olmayanlar"
-            />
-            <CheckboxField
-              checked={phoneAvailableOnly}
-              onChange={setPhoneAvailableOnly}
-              label="Yalnızca telefonu olanlar"
-            />
-            <CheckboxField
-              checked={excludeReviewCardSubscribers}
-              onChange={setExcludeReviewCardSubscribers}
-              label="Yorum Kart abonelerini listeden çıkar"
-            />
-            <CheckboxField
-              checked={ratingUnderOnly}
-              onChange={setRatingUnderOnly}
-              label="Yalnızca puanı 4.2 altında olanlar"
-            />
-          </div>
-
-          <div className="flex items-end">
-            <button type="button" onClick={handleClearFilters} className="btn-secondary w-full">
-              Filtreleri Temizle
-            </button>
-          </div>
+              <div className="grid gap-3 rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 md:grid-cols-3">
+                <CheckboxField
+                  checked={websiteMissingOnly}
+                  onChange={setWebsiteMissingOnly}
+                  label="Web sitesi olmayanları göster"
+                />
+                <CheckboxField
+                  checked={phoneAvailableOnly}
+                  onChange={setPhoneAvailableOnly}
+                  label="Telefonu olanları göster"
+                />
+                <CheckboxField
+                  checked={excludeReviewCardSubscribers}
+                  onChange={setExcludeReviewCardSubscribers}
+                  label="Yorum Kart abonelerini listeden çıkar"
+                />
+              </div>
+            </div>
+          ) : null}
         </section>
-
         <section className="card-pop overflow-hidden">
           <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -590,23 +518,42 @@ export default function ResultsPage() {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="table-pop min-w-[1450px]">
+          <div className="hidden md:block">
+            <table className="table-pop w-full table-fixed">
               <thead>
                 <tr>
-                  <th className="text-left">İşletme</th>
-                  <th className="text-left">Kategori</th>
-                  <th className="text-left">Konum</th>
-                  <th className="text-left">Puan</th>
-                  <th className="text-left">Yorum</th>
-                  <th className="text-left">Web Sitesi</th>
-                  <th className="text-left">Telefon</th>
-                  <th className="text-left">Fırsat Skoru</th>
-                  <th className="text-left">Yorum Kart Skoru</th>
-                  <th className="text-left">Harita</th>
-                  <th className="text-left">Yorum Kart Abonesi</th>
-                  <th className="text-left">Favori</th>
-                  <th className="text-left">Detay</th>
+                  <th className="w-[30%] text-left">İşletme</th>
+                  <SortableHeader
+                    label="Puan"
+                    column="rating"
+                    activeColumn={sortBy}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Yorum"
+                    column="reviewCount"
+                    activeColumn={sortBy}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Fırsat Skoru"
+                    column="leadScore"
+                    activeColumn={sortBy}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Yorum Kart Skoru"
+                    column="reviewCardScore"
+                    activeColumn={sortBy}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                  
+                  
+                  <th className="w-[22%] text-left">Aksiyonlar</th>
                 </tr>
               </thead>
               <tbody>
@@ -615,17 +562,22 @@ export default function ResultsPage() {
 
                   return (
                     <tr key={getBusinessKey(business)}>
-                      <td className="font-extrabold">{business.businessName}</td>
-                      <td>{business.category}</td>
-                      <td>{business.location}</td>
-                      <td>{business.rating.toFixed(1)}</td>
+                      <td>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-extrabold">
+                            {business.businessName}
+                          </span>
+                          <span className="text-xs font-bold text-slate-500">
+                            {business.category} • {business.location}
+                          </span>
+                          <span className="flex flex-wrap gap-2 pt-1">
+                            <StatusBadge active={business.hasWebsite} label="Web" />
+                            <StatusBadge active={business.hasPhone} label="Telefon" />
+                          </span>
+                        </div>
+                      </td>
+                      <td className="font-extrabold">{business.rating.toFixed(1)}</td>
                       <td>{business.reviewCount}</td>
-                      <td>
-                        <StatusBadge active={business.hasWebsite} />
-                      </td>
-                      <td>
-                        <StatusBadge active={business.hasPhone} />
-                      </td>
                       <td>
                         <span className="badge-pop bg-[#FBBF24]">
                           ⭐ {business.leadScore}/100
@@ -642,56 +594,122 @@ export default function ResultsPage() {
                         </div>
                       </td>
                       <td>
-                        <a
-                          href={business.mapsUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn-ghost min-h-10 px-3"
-                        >
-                          Aç
-                        </a>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => handleAddReviewCardSubscriber(business)}
-                          disabled={isReviewCardSubscriber(business)}
-                          className={`badge-pop min-h-10 ${
-                            isReviewCardSubscriber(business)
-                              ? "bg-[#34D399]"
-                              : "bg-white hover:bg-[#FBBF24]"
-                          }`}
-                        >
-                          {isReviewCardSubscriber(business)
-                            ? "Abone"
-                            : "Yorum Kart Abonesi"}
-                        </button>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => handleAddFavorite(business)}
-                          title={isFavorite(business) ? "Favoride" : "Favoriye ekle"}
-                          aria-label={isFavorite(business) ? "Favoride" : "Favoriye ekle"}
-                          className="heart-button"
-                        >
-                          {isFavorite(business) ? "❤️" : "♡"}
-                        </button>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedBusiness(business)}
-                          className="btn-secondary min-h-10 px-3 text-xs"
-                        >
-                          Detay
-                        </button>
+                        <BusinessActions
+                          business={business}
+                          isFavorite={isFavorite(business)}
+                          isSubscriber={isReviewCardSubscriber(business)}
+                          onAddFavorite={handleAddFavorite}
+                          onAddSubscriber={handleToggleReviewCardSubscriber}
+                          onOpenDetail={setSelectedBusiness}
+                        />
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="grid gap-4 p-4 md:hidden">
+            <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
+              <p className="text-xs font-black uppercase text-slate-500">Sırala</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <MobileSortButton
+                  label="Puan"
+                  column="rating"
+                  activeColumn={sortBy}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <MobileSortButton
+                  label="Yorum"
+                  column="reviewCount"
+                  activeColumn={sortBy}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <MobileSortButton
+                  label="Fırsat"
+                  column="leadScore"
+                  activeColumn={sortBy}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <MobileSortButton
+                  label="Yorum Kart"
+                  column="reviewCardScore"
+                  activeColumn={sortBy}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+              </div>
+            </div>
+
+            {filteredBusinesses.map((business) => {
+              const reviewCardScore = getReviewCardScore(business);
+
+              return (
+                <article
+                  key={getBusinessKey(business)}
+                  className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-heading text-xl font-black text-[#1E293B]">
+                        {business.businessName}
+                      </h3>
+                      <p className="mt-1 text-sm font-bold text-slate-600">
+                        {business.category} • {business.location}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAddFavorite(business)}
+                      title={isFavorite(business) ? "Favoride" : "Favoriye ekle"}
+                      aria-label={isFavorite(business) ? "Favoride" : "Favoriye ekle"}
+                      className="heart-button shrink-0"
+                    >
+                      {isFavorite(business) ? "❤️" : "♡"}
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <MetricBadge label="Puan" value={business.rating.toFixed(1)} />
+                    <MetricBadge label="Yorum" value={String(business.reviewCount)} />
+                    <MetricBadge
+                      label="Fırsat Skoru"
+                      value={`⭐ ${business.leadScore}/100`}
+                    />
+                    <MetricBadge
+                      label="Yorum Kart"
+                      value={`${reviewCardScore}/100`}
+                      helper={getReviewCardFitLabel(reviewCardScore)}
+                    />
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleReviewCardSubscriber(business)}
+                      className={`btn-secondary w-full ${
+                        isReviewCardSubscriber(business) ? "bg-[#34D399]" : ""
+                      }`}
+                    >
+                      {isReviewCardSubscriber(business)
+                        ? "Abonelikten Çıkar"
+                        : "Yorum Kart Abonesi"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBusiness(business)}
+                      className="btn-primary w-full"
+                    >
+                      Detay
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       </div>
@@ -748,6 +766,14 @@ export default function ResultsPage() {
                   getReviewCardScore(selectedBusiness),
                 )}`}
               />
+              <DetailItem
+                label="Yorum Kart Aboneliği"
+                value={
+                  isReviewCardSubscriber(selectedBusiness)
+                    ? "Abone"
+                    : "Abone değil"
+                }
+              />
             </div>
 
             <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
@@ -767,6 +793,15 @@ export default function ResultsPage() {
                 className="heart-button"
               >
                 {isFavorite(selectedBusiness) ? "❤️" : "♡"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleReviewCardSubscriber(selectedBusiness)}
+                className="btn-secondary"
+              >
+                {isReviewCardSubscriber(selectedBusiness)
+                  ? "Abonelikten Çıkar"
+                  : "Yorum Kart Abonesi"}
               </button>
               <button
                 type="button"
@@ -843,6 +878,68 @@ function CheckboxField({
   );
 }
 
+function SortableHeader({
+  label,
+  column,
+  activeColumn,
+  direction,
+  onSort,
+}: {
+  label: string;
+  column: SortOption;
+  activeColumn: SortOption;
+  direction: SortDirection;
+  onSort: (column: SortOption) => void;
+}) {
+  const isActive = activeColumn === column;
+  const indicator = isActive ? (direction === "asc" ? "↑" : "↓") : "";
+
+  return (
+    <th className="text-left">
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        title={`${label} kolonuna göre sırala`}
+        aria-label={`${label} kolonuna göre sırala`}
+        className="inline-flex min-h-9 items-center gap-1 rounded-full border-2 border-transparent px-2 py-1 font-black transition hover:border-[#1E293B] hover:bg-white hover:underline"
+      >
+        <span>{label}</span>
+        {indicator ? <span aria-hidden="true">{indicator}</span> : null}
+      </button>
+    </th>
+  );
+}
+
+function MobileSortButton({
+  label,
+  column,
+  activeColumn,
+  direction,
+  onSort,
+}: {
+  label: string;
+  column: SortOption;
+  activeColumn: SortOption;
+  direction: SortDirection;
+  onSort: (column: SortOption) => void;
+}) {
+  const isActive = activeColumn === column;
+  const indicator = isActive ? (direction === "asc" ? "↑" : "↓") : "";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      aria-label={`${label} değerine göre sırala`}
+      className={`min-h-11 rounded-full border-2 border-[#1E293B] px-3 text-sm font-black transition ${
+        isActive ? "bg-[#8B5CF6] text-white" : "bg-white hover:bg-[#FBBF24]"
+      }`}
+    >
+      {label} {indicator}
+    </button>
+  );
+}
+
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
@@ -852,10 +949,77 @@ function DetailItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatusBadge({ active }: { active: boolean }) {
+function BusinessActions({
+  business,
+  isFavorite,
+  isSubscriber,
+  onAddFavorite,
+  onAddSubscriber,
+  onOpenDetail,
+}: {
+  business: BusinessResult;
+  isFavorite: boolean;
+  isSubscriber: boolean;
+  onAddFavorite: (business: BusinessResult) => void;
+  onAddSubscriber: (business: BusinessResult) => void;
+  onOpenDetail: (business: BusinessResult) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onAddFavorite(business)}
+        title={isFavorite ? "Favoride" : "Favoriye ekle"}
+        aria-label={isFavorite ? "Favoride" : "Favoriye ekle"}
+        className="heart-button"
+      >
+        {isFavorite ? "❤️" : "♡"}
+      </button>
+      <button
+        type="button"
+        onClick={() => onAddSubscriber(business)}
+        className={`badge-pop min-h-10 ${isSubscriber ? "bg-[#34D399]" : "bg-white hover:bg-[#FBBF24]"}`}
+      >
+        {isSubscriber ? "Abonelikten Çıkar" : "Yorum Kart"}
+      </button>
+      <button
+        type="button"
+        onClick={() => onOpenDetail(business)}
+        className="btn-secondary min-h-10 px-3 text-xs"
+      >
+        Detay
+      </button>
+    </div>
+  );
+}
+
+function MetricBadge({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper?: string;
+}) {
+  return (
+    <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
+      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-black text-[#1E293B]">{value}</p>
+      {helper ? (
+        <p className="mt-1 text-xs font-extrabold text-slate-500">{helper}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusBadge({ active, label }: { active: boolean; label?: string }) {
   return (
     <span className={`badge-pop ${active ? "bg-[#34D399]" : "bg-[#FBBF24]"}`}>
+      {label ? `${label}: ` : ""}
       {active ? "Var" : "Yok"}
     </span>
   );
 }
+
+

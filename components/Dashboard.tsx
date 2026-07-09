@@ -1,81 +1,99 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { LATEST_ANALYSIS_STORAGE_KEY } from "@/lib/storage-keys";
-import type { LatestAnalysis } from "@/types/business";
+import {
+  clearAnalysisHistory,
+  getAnalysisHistory,
+  removeAnalysisFromHistory,
+  setLatestAnalysis,
+} from "@/lib/analysis-history";
+import {
+  FAVORITES_STORAGE_KEY,
+  REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY,
+} from "@/lib/storage-keys";
+import type { AnalysisHistoryItem, BusinessResult } from "@/types/business";
 
-function getLatestAnalysis(): LatestAnalysis | null {
+function getStoredBusinessCount(storageKey: string): number {
   if (typeof window === "undefined") {
-    return null;
+    return 0;
   }
 
-  const savedAnalysis = window.localStorage.getItem(LATEST_ANALYSIS_STORAGE_KEY);
+  const savedValue = window.localStorage.getItem(storageKey);
 
-  if (!savedAnalysis) {
-    return null;
+  if (!savedValue) {
+    return 0;
   }
 
   try {
-    return JSON.parse(savedAnalysis) as LatestAnalysis;
+    return (JSON.parse(savedValue) as BusinessResult[]).length;
   } catch {
-    window.localStorage.removeItem(LATEST_ANALYSIS_STORAGE_KEY);
-    return null;
+    window.localStorage.removeItem(storageKey);
+    return 0;
   }
 }
 
+function getIntentLabel(intent: AnalysisHistoryItem["selectedIntent"]): string {
+  if (intent === "review-card") {
+    return "Yorum Kart";
+  }
+
+  if (intent === "web-design") {
+    return "Web Tasarım";
+  }
+
+  return "Genel";
+}
+
 export default function Dashboard() {
-  const [latestAnalysis] = useState<LatestAnalysis | null>(getLatestAnalysis);
-  const potentialLeads =
-    latestAnalysis?.businesses.filter((business) => business.leadScore >= 75).length ?? 0;
+  const router = useRouter();
+  const [history, setHistory] = useState<AnalysisHistoryItem[]>(getAnalysisHistory);
+  const [favoritesCount] = useState(() => getStoredBusinessCount(FAVORITES_STORAGE_KEY));
+  const [subscriberCount] = useState(() =>
+    getStoredBusinessCount(REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY),
+  );
+  const totalBusinesses = history.reduce(
+    (total, analysis) => total + analysis.businesses.length,
+    0,
+  );
 
   const stats = [
     {
       label: "Toplam Analiz",
-      value: latestAnalysis ? "1" : "0",
+      value: String(history.length),
       accent: "bg-[#FBBF24]",
     },
     {
       label: "Bulunan İşletme",
-      value: String(latestAnalysis?.businesses.length ?? 0),
+      value: String(totalBusinesses),
       accent: "bg-[#34D399]",
     },
     {
-      label: "Potansiyel Müşteri Adayı",
-      value: String(potentialLeads),
+      label: "Favoriler",
+      value: String(favoritesCount),
       accent: "bg-[#F472B6]",
+    },
+    {
+      label: "Yorum Kart Aboneleri",
+      value: String(subscriberCount),
+      accent: "bg-[#EDE9FE]",
     },
   ];
 
-  const recentAnalyses = latestAnalysis
-    ? [
-        {
-          location: `${latestAnalysis.city} / ${latestAnalysis.district}`,
-          category: latestAnalysis.category,
-          businesses: latestAnalysis.businesses.length,
-          leads: potentialLeads,
-        },
-      ]
-    : [
-        {
-          location: "İstanbul / Kadıköy",
-          category: "Cafe",
-          businesses: 0,
-          leads: 0,
-        },
-        {
-          location: "Ankara / Çankaya",
-          category: "Diş Kliniği",
-          businesses: 0,
-          leads: 0,
-        },
-        {
-          location: "İzmir / Konak",
-          category: "Güzellik Salonu",
-          businesses: 0,
-          leads: 0,
-        },
-      ];
+  function handleOpenAnalysis(analysis: AnalysisHistoryItem) {
+    setLatestAnalysis(analysis);
+    router.push("/results");
+  }
+
+  function handleRemoveAnalysis(id: string) {
+    setHistory(removeAnalysisFromHistory(id));
+  }
+
+  function handleClearHistory() {
+    clearAnalysisHistory();
+    setHistory([]);
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
@@ -84,8 +102,9 @@ export default function Dashboard() {
           <p className="page-eyebrow">Panel</p>
           <h1 className="page-title mt-5">Lead Finder AI</h1>
           <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
-            İşletme analizleri, potansiyel müşteri adayları ve son aramalar tek
-            yerde. Sıcak, hızlı ve aksiyona hazır bir satış panosu.
+            Analiz geçmişi, favoriler ve satış aksiyonları tek yerde. Yeni
+            Google Maps analizleri ve manuel yüklenen veriler burada kalıcı
+            olarak listelenir.
           </p>
         </div>
 
@@ -99,7 +118,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat, index) => (
           <article
             key={stat.label}
@@ -121,74 +140,81 @@ export default function Dashboard() {
         ))}
       </section>
 
-      {latestAnalysis ? (
-        <section className="card-pop p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-heading text-2xl font-black text-[#1E293B]">
-              Son Analiz
-            </h2>
-            <span className="badge-pop bg-[#34D399]">Canlı veri</span>
-          </div>
-          <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
-            <InfoItem label="Ülke" value={latestAnalysis.country} />
-            <InfoItem label="Şehir" value={latestAnalysis.city} />
-            <InfoItem label="İlçe" value={latestAnalysis.district} />
-            <InfoItem label="Kategori" value={latestAnalysis.category} />
-            <InfoItem
-              label="Oluşturulma"
-              value={new Intl.DateTimeFormat("tr-TR", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              }).format(new Date(latestAnalysis.createdAt))}
-            />
-          </dl>
-        </section>
-      ) : null}
-
       <section className="card-pop overflow-hidden">
-        <div className="border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4">
-          <h2 className="font-heading text-xl font-black text-[#1E293B]">
-            Son Analizler
-          </h2>
-          <p className="mt-1 text-sm font-semibold text-[#1E293B]">
-            {latestAnalysis
-              ? "Son oluşturulan analiz aşağıda listeleniyor."
-              : "Henüz gerçek analiz verisi bağlanmadı."}
-          </p>
+        <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-heading text-xl font-black text-[#1E293B]">
+              Son Analizler
+            </h2>
+            <p className="mt-1 text-sm font-semibold text-[#1E293B]">
+              Google API demo sonuçları ve manuel yüklenen veriler burada
+              tutulur.
+            </p>
+          </div>
+          {history.length > 0 ? (
+            <button type="button" onClick={handleClearHistory} className="btn-danger">
+              Tüm Geçmişi Temizle
+            </button>
+          ) : null}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="table-pop min-w-[640px]">
-            <thead>
-              <tr>
-                <th className="text-left">Konum</th>
-                <th className="text-left">Kategori</th>
-                <th className="text-left">İşletme</th>
-                <th className="text-left">Müşteri Adayı</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentAnalyses.map((analysis) => (
-                <tr key={`${analysis.location}-${analysis.category}`}>
-                  <td className="font-bold">{analysis.location}</td>
-                  <td>{analysis.category}</td>
-                  <td>{analysis.businesses}</td>
-                  <td>{analysis.leads}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {history.length === 0 ? (
+          <div className="p-5">
+            <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
+              Henüz kayıtlı analiz yok. Yeni analiz oluşturarak veya manuel veri
+              yükleyerek başlayın.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 p-4">
+            {history.map((analysis) => (
+              <article
+                key={analysis.id}
+                className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]"
+              >
+                <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                  <div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="badge-pop bg-[#34D399]">
+                        {getIntentLabel(analysis.selectedIntent)}
+                      </span>
+                      <span className="badge-pop bg-[#F5F3FF]">
+                        {new Intl.DateTimeFormat("tr-TR", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(analysis.createdAt))}
+                      </span>
+                    </div>
+                    <h3 className="mt-3 font-heading text-2xl font-black text-[#1E293B]">
+                      {analysis.city} / {analysis.district}
+                    </h3>
+                    <p className="mt-1 text-sm font-bold text-slate-600">
+                      {analysis.category} · {analysis.businesses.length} işletme
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAnalysis(analysis)}
+                      className="btn-primary"
+                    >
+                      Sonuçları Aç
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAnalysis(analysis.id)}
+                      className="btn-danger"
+                    >
+                      Analizi Sil
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
-    </div>
-  );
-}
-
-function InfoItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
-      <dt className="text-xs font-black uppercase text-slate-500">{label}</dt>
-      <dd className="mt-2 text-sm font-extrabold text-[#1E293B]">{value}</dd>
     </div>
   );
 }

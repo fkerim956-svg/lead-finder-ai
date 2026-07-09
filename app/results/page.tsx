@@ -1,9 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import { saveAnalysisToHistory } from "@/lib/analysis-history";
 import { calculateLeadScore } from "@/lib/lead-score";
 import {
   calculateReviewCardScore,
@@ -19,9 +20,12 @@ import {
   calculateWebDesignScore,
   getWebDesignFitLabel,
 } from "@/lib/web-design-score";
-import type { BusinessResult, LatestAnalysis } from "@/types/business";
+import type {
+  BusinessResult,
+  LatestAnalysis,
+  SelectedIntent,
+} from "@/types/business";
 
-type SelectedIntent = "review-card" | "web-design";
 type SortOption =
   | "leadScore"
   | "rating"
@@ -217,6 +221,17 @@ export default function ResultsPage() {
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessResult | null>(null);
   const isReviewCardMode = selectedIntent === "review-card";
+
+  useEffect(() => {
+    if (!latestAnalysis) {
+      return;
+    }
+
+    saveAnalysisToHistory({
+      ...latestAnalysis,
+      selectedIntent: latestAnalysis.selectedIntent ?? selectedIntent,
+    });
+  }, [latestAnalysis, selectedIntent]);
 
   const pageContent = isReviewCardMode
     ? {

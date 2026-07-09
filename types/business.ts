@@ -10,11 +10,20 @@ export type BusinessResult = {
   mapsUrl: string;
 };
 
+export type SelectedIntent = "review-card" | "web-design";
+
 export type LatestAnalysis = {
+  id?: string;
   country: string;
   city: string;
   district: string;
   category: string;
   createdAt: string;
+  selectedIntent?: SelectedIntent;
   businesses: BusinessResult[];
+};
+
+export type AnalysisHistoryItem = LatestAnalysis & {
+  id: string;
+  businessCount: number;
 };

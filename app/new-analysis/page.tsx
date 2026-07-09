@@ -2,15 +2,33 @@
 
 import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import { businessCategories } from "@/lib/business-categories";
-import { LATEST_ANALYSIS_STORAGE_KEY } from "@/lib/storage-keys";
+import {
+  LATEST_ANALYSIS_STORAGE_KEY,
+  SELECTED_INTENT_STORAGE_KEY,
+} from "@/lib/storage-keys";
 import { districtsByProvince, provinces } from "@/lib/turkey-locations";
 import type { LatestAnalysis } from "@/types/business";
 
+type SelectedIntent = "review-card" | "web-design";
+
+function getSelectedIntent(): SelectedIntent {
+  if (typeof window === "undefined") {
+    return "review-card";
+  }
+
+  return window.localStorage.getItem(SELECTED_INTENT_STORAGE_KEY) ===
+    "web-design"
+    ? "web-design"
+    : "review-card";
+}
+
 export default function NewAnalysisPage() {
   const router = useRouter();
+  const [selectedIntent] = useState<SelectedIntent>(getSelectedIntent);
   const [country] = useState("Türkiye");
   const [city, setCity] = useState("İstanbul");
   const [district, setDistrict] = useState("Kadıköy");
@@ -18,6 +36,20 @@ export default function NewAnalysisPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const availableDistricts = districtsByProvince[city] ?? [];
+  const intentContent =
+    selectedIntent === "web-design"
+      ? {
+          label: "Web Tasarım",
+          title: "Web Tasarım için işletme analizi",
+          subtitle:
+            "Web sitesi olmayan, dijital vitrini zayıf ve ulaşılabilir işletmeleri bul.",
+        }
+      : {
+          label: "Yorum Kart",
+          title: "Yorum Kart için işletme analizi",
+          subtitle:
+            "Google’da puanı düşük, yorumları zayıf veya müşteri güveni eksik görünen işletmeleri bul.",
+        };
 
   function handleCityChange(selectedCity: string) {
     const nextDistricts = districtsByProvince[selectedCity] ?? [];
@@ -83,13 +115,17 @@ export default function NewAnalysisPage() {
   return (
     <AppShell>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
-        <header className="relative">
-          <p className="page-eyebrow">Yeni Analiz</p>
-          <h1 className="page-title mt-5">Yeni analiz oluştur</h1>
-          <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
-            Ülke, şehir, ilçe ve kategori seçerek demo analiz akışını başlat.
-            Seçimlerin sonuç sayfasına aynen taşınır.
-          </p>
+        <header className="relative grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+          <div>
+            <p className="page-eyebrow">{intentContent.label} Modu</p>
+            <h1 className="page-title mt-5">{intentContent.title}</h1>
+            <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
+              {intentContent.subtitle}
+            </p>
+          </div>
+          <Link href="/" className="btn-secondary w-fit">
+            Modu Değiştir
+          </Link>
         </header>
 
         <form onSubmit={handleAnalyze} className="card-pop grid gap-5 p-5 md:grid-cols-2">

@@ -1,7 +1,8 @@
-﻿"use client";
+"use client";
 
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { calculateLeadScore } from "@/lib/lead-score";
 import {
@@ -12,10 +13,21 @@ import {
   FAVORITES_STORAGE_KEY,
   LATEST_ANALYSIS_STORAGE_KEY,
   REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY,
+  SELECTED_INTENT_STORAGE_KEY,
 } from "@/lib/storage-keys";
+import {
+  calculateWebDesignScore,
+  getWebDesignFitLabel,
+} from "@/lib/web-design-score";
 import type { BusinessResult, LatestAnalysis } from "@/types/business";
 
-type SortOption = "leadScore" | "rating" | "reviewCount" | "reviewCardScore";
+type SelectedIntent = "review-card" | "web-design";
+type SortOption =
+  | "leadScore"
+  | "rating"
+  | "reviewCount"
+  | "reviewCardScore"
+  | "webDesignScore";
 type SortDirection = "asc" | "desc";
 
 const allCategoriesOption = "Tüm kategoriler";
@@ -103,11 +115,36 @@ const demoBusinesses: Array<Omit<BusinessResult, "leadScore">> = [
   },
 ];
 
+function getSelectedIntent(): SelectedIntent {
+  if (typeof window === "undefined") {
+    return "review-card";
+  }
+
+  return window.localStorage.getItem(SELECTED_INTENT_STORAGE_KEY) ===
+    "web-design"
+    ? "web-design"
+    : "review-card";
+}
+
 function getBusinessKey(business: Pick<BusinessResult, "businessName" | "location">) {
   return `${business.businessName}-${business.location}`;
 }
 
+function getReviewCardScore(business: BusinessResult): number {
+  return calculateReviewCardScore({
+    rating: business.rating,
+    reviewCount: business.reviewCount,
+    hasWebsite: business.hasWebsite,
+    hasPhone: business.hasPhone,
+  });
+}
+
+function getWebScore(business: BusinessResult): number {
+  return calculateWebDesignScore(business);
+}
+
 export default function ResultsPage() {
+  const [selectedIntent] = useState<SelectedIntent>(getSelectedIntent);
   const [latestAnalysis] = useState<LatestAnalysis | null>(() => {
     if (typeof window === "undefined") {
       return null;
@@ -166,15 +203,34 @@ export default function ResultsPage() {
       return [];
     }
   });
-  const [websiteMissingOnly, setWebsiteMissingOnly] = useState(false);
+  const [websiteMissingOnly, setWebsiteMissingOnly] = useState(
+    selectedIntent === "web-design",
+  );
   const [phoneAvailableOnly, setPhoneAvailableOnly] = useState(false);
   const [excludeReviewCardSubscribers, setExcludeReviewCardSubscribers] =
     useState(false);
   const [selectedCategory, setSelectedCategory] = useState(allCategoriesOption);
-  const [sortBy, setSortBy] = useState<SortOption>("leadScore");
+  const [sortBy, setSortBy] = useState<SortOption>(
+    selectedIntent === "web-design" ? "webDesignScore" : "reviewCardScore",
+  );
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessResult | null>(null);
+  const isReviewCardMode = selectedIntent === "review-card";
+
+  const pageContent = isReviewCardMode
+    ? {
+        label: "Yorum Kart",
+        title: "Yorum Kart Adayları",
+        subtitle:
+          "Puan ve yorum toplama ihtiyacı olan işletmeleri önceliklendirin.",
+      }
+    : {
+        label: "Web Tasarım",
+        title: "Web Tasarım Adayları",
+        subtitle:
+          "Web sitesi olmayan ve dijital vitrini zayıf işletmeleri önceliklendirin.",
+      };
 
   const businessesWithScore = useMemo<BusinessResult[]>(() => {
     const businesses = latestAnalysis?.businesses ?? demoBusinesses;
@@ -210,19 +266,10 @@ export default function ResultsPage() {
       )
       .toSorted((first, second) => {
         const directionMultiplier = sortDirection === "asc" ? 1 : -1;
-        let difference = 0;
+        const firstValue = getSortValue(first, sortBy);
+        const secondValue = getSortValue(second, sortBy);
 
-        if (sortBy === "rating") {
-          difference = first.rating - second.rating;
-        } else if (sortBy === "reviewCount") {
-          difference = first.reviewCount - second.reviewCount;
-        } else if (sortBy === "reviewCardScore") {
-          difference = getReviewCardScore(first) - getReviewCardScore(second);
-        } else {
-          difference = first.leadScore - second.leadScore;
-        }
-
-        return difference * directionMultiplier;
+        return (firstValue - secondValue) * directionMultiplier;
       });
   }, [
     businessesWithScore,
@@ -254,21 +301,12 @@ export default function ResultsPage() {
     [businessesWithScore],
   );
 
-  function getReviewCardScore(business: BusinessResult): number {
-    return calculateReviewCardScore({
-      rating: business.rating,
-      reviewCount: business.reviewCount,
-      hasWebsite: business.hasWebsite,
-      hasPhone: business.hasPhone,
-    });
-  }
-
   function handleClearFilters() {
     setWebsiteMissingOnly(false);
     setPhoneAvailableOnly(false);
     setExcludeReviewCardSubscribers(false);
     setSelectedCategory(allCategoriesOption);
-    setSortBy("leadScore");
+    setSortBy(isReviewCardMode ? "reviewCardScore" : "webDesignScore");
     setSortDirection("desc");
   }
 
@@ -299,17 +337,31 @@ export default function ResultsPage() {
   }
 
   function handleDownloadCsv() {
-    const headers = [
-      "İşletme Adı",
-      "Kategori",
-      "Konum",
-      "Google Puanı",
-      "Yorum Sayısı",
-      "Web Sitesi",
-      "Telefon",
-      "Lead Score",
-      "Google Maps Linki",
-    ];
+    const headers = isReviewCardMode
+      ? [
+          "İşletme Adı",
+          "Kategori",
+          "Konum",
+          "Google Puanı",
+          "Yorum Sayısı",
+          "Web Sitesi",
+          "Telefon",
+          "Yorum Kart Skoru",
+          "Lead Score",
+          "Google Maps Linki",
+        ]
+      : [
+          "İşletme Adı",
+          "Kategori",
+          "Konum",
+          "Google Puanı",
+          "Yorum Sayısı",
+          "Web Sitesi",
+          "Telefon",
+          "Web Tasarım Skoru",
+          "Lead Score",
+          "Google Maps Linki",
+        ];
 
     const rows = filteredBusinesses.map((business) => [
       business.businessName,
@@ -319,6 +371,7 @@ export default function ResultsPage() {
       business.reviewCount,
       business.hasWebsite ? "Var" : "Yok",
       business.hasPhone ? "Var" : "Yok",
+      isReviewCardMode ? getReviewCardScore(business) : getWebScore(business),
       business.leadScore,
       business.mapsUrl,
     ]);
@@ -397,23 +450,23 @@ export default function ResultsPage() {
   return (
     <AppShell>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
-        <header>
-          <p className="page-eyebrow">Sonuçlar</p>
-          <h1 className="page-title mt-5">Analiz sonuçları</h1>
-          <p className="muted-text mt-4 max-w-3xl text-base font-medium leading-7">
-            {latestAnalysis
-              ? `${latestAnalysis.country} / ${latestAnalysis.city} / ${latestAnalysis.district} - ${latestAnalysis.category} analizi gösteriliyor.`
-              : "Örnek işletme verilerini filtrele, sırala ve en yüksek potansiyelli satış fırsatlarını önceliklendir."}
-          </p>
-          {latestAnalysis ? (
-            <p className="mt-3 w-fit rounded-full border-2 border-[#1E293B] bg-[#34D399] px-3 py-1 text-xs font-black text-[#1E293B]">
-              Oluşturulma:{" "}
-              {new Intl.DateTimeFormat("tr-TR", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              }).format(new Date(latestAnalysis.createdAt))}
+        <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+          <div>
+            <p className="page-eyebrow">{pageContent.label} Modu</p>
+            <h1 className="page-title mt-5">{pageContent.title}</h1>
+            <p className="muted-text mt-4 max-w-3xl text-base font-medium leading-7">
+              {pageContent.subtitle}
             </p>
-          ) : null}
+            {latestAnalysis ? (
+              <p className="mt-3 w-fit rounded-full border-2 border-[#1E293B] bg-[#34D399] px-3 py-1 text-xs font-black text-[#1E293B]">
+                {latestAnalysis.country} / {latestAnalysis.city} /{" "}
+                {latestAnalysis.district} - {latestAnalysis.category}
+              </p>
+            ) : null}
+          </div>
+          <Link href="/" className="btn-secondary w-fit">
+            Modu Değiştir
+          </Link>
         </header>
 
         <section className="grid gap-4 md:grid-cols-3">
@@ -442,7 +495,7 @@ export default function ResultsPage() {
                 Filtrele
               </h2>
               <p className="mt-1 text-sm font-bold text-slate-600">
-                Kategori ve temel görünürlük filtreleri.
+                Kategori, web sitesi ve telefon filtreleri.
               </p>
             </div>
             <span className="badge-pop bg-white">
@@ -480,12 +533,12 @@ export default function ResultsPage() {
                 <CheckboxField
                   checked={websiteMissingOnly}
                   onChange={setWebsiteMissingOnly}
-                  label="Web sitesi olmayanları göster"
+                  label="Yalnızca web sitesi olmayanlar"
                 />
                 <CheckboxField
                   checked={phoneAvailableOnly}
                   onChange={setPhoneAvailableOnly}
-                  label="Telefonu olanları göster"
+                  label="Yalnızca telefonu olanlar"
                 />
                 <CheckboxField
                   checked={excludeReviewCardSubscribers}
@@ -496,6 +549,7 @@ export default function ResultsPage() {
             </div>
           ) : null}
         </section>
+
         <section className="card-pop overflow-hidden">
           <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -521,7 +575,10 @@ export default function ResultsPage() {
             <table className="table-pop w-full table-fixed">
               <thead>
                 <tr>
-                  <th className="w-[30%] text-left">İşletme</th>
+                  <th className="w-[28%] text-left">İşletme</th>
+                  {isReviewCardMode ? null : (
+                    <th className="text-left">Web Sitesi</th>
+                  )}
                   <SortableHeader
                     label="Puan"
                     column="rating"
@@ -536,6 +593,23 @@ export default function ResultsPage() {
                     direction={sortDirection}
                     onSort={handleSort}
                   />
+                  {isReviewCardMode ? (
+                    <SortableHeader
+                      label="Yorum Kart Skoru"
+                      column="reviewCardScore"
+                      activeColumn={sortBy}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
+                  ) : (
+                    <SortableHeader
+                      label="Web Tasarım Skoru"
+                      column="webDesignScore"
+                      activeColumn={sortBy}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
+                  )}
                   <SortableHeader
                     label="Fırsat Skoru"
                     column="leadScore"
@@ -543,21 +617,13 @@ export default function ResultsPage() {
                     direction={sortDirection}
                     onSort={handleSort}
                   />
-                  <SortableHeader
-                    label="Yorum Kart Skoru"
-                    column="reviewCardScore"
-                    activeColumn={sortBy}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                  
-                  
                   <th className="w-[22%] text-left">Aksiyonlar</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredBusinesses.map((business) => {
                   const reviewCardScore = getReviewCardScore(business);
+                  const webDesignScore = getWebScore(business);
 
                   return (
                     <tr key={getBusinessKey(business)}>
@@ -569,32 +635,44 @@ export default function ResultsPage() {
                           <span className="text-xs font-bold text-slate-500">
                             {business.category} • {business.location}
                           </span>
-                          <span className="flex flex-wrap gap-2 pt-1">
-                            <StatusBadge active={business.hasWebsite} label="Web" />
-                            <StatusBadge active={business.hasPhone} label="Telefon" />
-                          </span>
+                          {business.hasWebsite ? null : (
+                            <span className="badge-pop w-fit bg-[#FBBF24]">
+                              Web sitesi yok
+                            </span>
+                          )}
                         </div>
                       </td>
+                      {isReviewCardMode ? null : (
+                        <td>
+                          <StatusBadge active={business.hasWebsite} label="Web" />
+                        </td>
+                      )}
                       <td className="font-extrabold">{business.rating.toFixed(1)}</td>
                       <td>{business.reviewCount}</td>
+                      <td>
+                        {isReviewCardMode ? (
+                          <ScoreBadge
+                            score={reviewCardScore}
+                            label={getReviewCardFitLabel(reviewCardScore)}
+                            color="#EDE9FE"
+                          />
+                        ) : (
+                          <ScoreBadge
+                            score={webDesignScore}
+                            label={getWebDesignFitLabel(webDesignScore)}
+                            color="#DBEAFE"
+                          />
+                        )}
+                      </td>
                       <td>
                         <span className="badge-pop bg-[#FBBF24]">
                           ⭐ {business.leadScore}/100
                         </span>
                       </td>
                       <td>
-                        <div className="flex flex-col gap-1">
-                          <span className="badge-pop bg-[#EDE9FE]">
-                            {reviewCardScore}/100
-                          </span>
-                          <span className="text-xs font-extrabold text-slate-500">
-                            {getReviewCardFitLabel(reviewCardScore)}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
                         <BusinessActions
                           business={business}
+                          intent={selectedIntent}
                           isFavorite={isFavorite(business)}
                           isSubscriber={isReviewCardSubscriber(business)}
                           onAddFavorite={handleAddFavorite}
@@ -613,39 +691,35 @@ export default function ResultsPage() {
             <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
               <p className="text-xs font-black uppercase text-slate-500">Sırala</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <MobileSortButton
-                  label="Puan"
-                  column="rating"
-                  activeColumn={sortBy}
-                  direction={sortDirection}
-                  onSort={handleSort}
-                />
-                <MobileSortButton
-                  label="Yorum"
-                  column="reviewCount"
-                  activeColumn={sortBy}
-                  direction={sortDirection}
-                  onSort={handleSort}
-                />
-                <MobileSortButton
-                  label="Fırsat"
-                  column="leadScore"
-                  activeColumn={sortBy}
-                  direction={sortDirection}
-                  onSort={handleSort}
-                />
-                <MobileSortButton
-                  label="Yorum Kart"
-                  column="reviewCardScore"
-                  activeColumn={sortBy}
-                  direction={sortDirection}
-                  onSort={handleSort}
-                />
+                {(isReviewCardMode
+                  ? [
+                      ["Puan", "rating"],
+                      ["Yorum", "reviewCount"],
+                      ["Yorum Kart", "reviewCardScore"],
+                      ["Fırsat", "leadScore"],
+                    ]
+                  : [
+                      ["Web Tasarım", "webDesignScore"],
+                      ["Puan", "rating"],
+                      ["Yorum", "reviewCount"],
+                      ["Fırsat", "leadScore"],
+                    ]
+                ).map(([label, column]) => (
+                  <MobileSortButton
+                    key={column}
+                    label={label}
+                    column={column as SortOption}
+                    activeColumn={sortBy}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  />
+                ))}
               </div>
             </div>
 
             {filteredBusinesses.map((business) => {
               const reviewCardScore = getReviewCardScore(business);
+              const webDesignScore = getWebScore(business);
 
               return (
                 <article
@@ -672,32 +746,54 @@ export default function ResultsPage() {
                     </button>
                   </div>
 
+                  {isReviewCardMode ? null : (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <StatusBadge active={business.hasWebsite} label="Web Sitesi" />
+                      <StatusBadge active={business.hasPhone} label="Telefon" />
+                      {!business.hasWebsite ? (
+                        <span className="badge-pop bg-[#FBBF24]">
+                          Web sitesi yok
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
+
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <MetricBadge label="Puan" value={business.rating.toFixed(1)} />
                     <MetricBadge label="Yorum" value={String(business.reviewCount)} />
+                    {isReviewCardMode ? (
+                      <MetricBadge
+                        label="Yorum Kart"
+                        value={`${reviewCardScore}/100`}
+                        helper={getReviewCardFitLabel(reviewCardScore)}
+                      />
+                    ) : (
+                      <MetricBadge
+                        label="Web Tasarım"
+                        value={`${webDesignScore}/100`}
+                        helper={getWebDesignFitLabel(webDesignScore)}
+                      />
+                    )}
                     <MetricBadge
                       label="Fırsat Skoru"
                       value={`⭐ ${business.leadScore}/100`}
                     />
-                    <MetricBadge
-                      label="Yorum Kart"
-                      value={`${reviewCardScore}/100`}
-                      helper={getReviewCardFitLabel(reviewCardScore)}
-                    />
                   </div>
 
                   <div className="mt-4 grid gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleReviewCardSubscriber(business)}
-                      className={`btn-secondary w-full ${
-                        isReviewCardSubscriber(business) ? "bg-[#34D399]" : ""
-                      }`}
-                    >
-                      {isReviewCardSubscriber(business)
-                        ? "Abonelikten Çıkar"
-                        : "Yorum Kart Abonesi"}
-                    </button>
+                    {isReviewCardMode ? (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleReviewCardSubscriber(business)}
+                        className={`btn-secondary w-full ${
+                          isReviewCardSubscriber(business) ? "bg-[#34D399]" : ""
+                        }`}
+                      >
+                        {isReviewCardSubscriber(business)
+                          ? "Abonelikten Çıkar"
+                          : "Yorum Kart Abonesi"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => setSelectedBusiness(business)}
@@ -714,106 +810,154 @@ export default function ResultsPage() {
       </div>
 
       {selectedBusiness ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
-          <section className="hard-shadow-lg w-full max-w-2xl rounded-[28px] border-2 border-[#1E293B] bg-white">
-            <div className="flex items-start justify-between gap-4 border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4">
-              <div>
-                <p className="page-eyebrow bg-[#34D399]">İşletme Detayı</p>
-                <h2 className="mt-3 font-heading text-3xl font-black tracking-tight text-[#1E293B]">
-                  {selectedBusiness.businessName}
-                </h2>
-                <p className="mt-2 text-sm font-extrabold text-slate-600">
-                  {getLeadScoreExplanation(selectedBusiness.leadScore)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedBusiness(null)}
-                className="btn-secondary min-h-10 px-4"
-              >
-                Kapat
-              </button>
-            </div>
+        <BusinessDetailModal
+          business={selectedBusiness}
+          intent={selectedIntent}
+          isFavorite={isFavorite(selectedBusiness)}
+          isSubscriber={isReviewCardSubscriber(selectedBusiness)}
+          onAddFavorite={handleAddFavorite}
+          onToggleSubscriber={handleToggleReviewCardSubscriber}
+          onClose={() => setSelectedBusiness(null)}
+          leadExplanation={getLeadScoreExplanation(selectedBusiness.leadScore)}
+        />
+      ) : null}
+    </AppShell>
+  );
+}
 
-            <div className="grid gap-4 p-5 sm:grid-cols-2">
-              <DetailItem label="Kategori" value={selectedBusiness.category} />
-              <DetailItem label="Konum" value={selectedBusiness.location} />
-              <DetailItem label="Puan" value={selectedBusiness.rating.toFixed(1)} />
-              <DetailItem
-                label="Yorum Sayısı"
-                value={String(selectedBusiness.reviewCount)}
-              />
-              <DetailItem
-                label="Web Sitesi"
-                value={selectedBusiness.hasWebsite ? "Var" : "Yok"}
-              />
-              <DetailItem
-                label="Telefon"
-                value={selectedBusiness.hasPhone ? "Var" : "Yok"}
-              />
-              <DetailItem
-                label="Fırsat Skoru"
-                value={`⭐ ${selectedBusiness.leadScore}/100`}
-              />
-              <DetailItem
-                label="Potansiyel"
-                value={getLeadScoreExplanation(selectedBusiness.leadScore)}
-              />
+function getSortValue(business: BusinessResult, sortBy: SortOption): number {
+  if (sortBy === "rating") {
+    return business.rating;
+  }
+
+  if (sortBy === "reviewCount") {
+    return business.reviewCount;
+  }
+
+  if (sortBy === "reviewCardScore") {
+    return getReviewCardScore(business);
+  }
+
+  if (sortBy === "webDesignScore") {
+    return getWebScore(business);
+  }
+
+  return business.leadScore;
+}
+
+function BusinessDetailModal({
+  business,
+  intent,
+  isFavorite,
+  isSubscriber,
+  onAddFavorite,
+  onToggleSubscriber,
+  onClose,
+  leadExplanation,
+}: {
+  business: BusinessResult;
+  intent: SelectedIntent;
+  isFavorite: boolean;
+  isSubscriber: boolean;
+  onAddFavorite: (business: BusinessResult) => void;
+  onToggleSubscriber: (business: BusinessResult) => void;
+  onClose: () => void;
+  leadExplanation: string;
+}) {
+  const isReviewCardMode = intent === "review-card";
+  const reviewCardScore = getReviewCardScore(business);
+  const webDesignScore = getWebScore(business);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
+      <section className="hard-shadow-lg max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-2 border-[#1E293B] bg-white">
+        <div className="flex items-start justify-between gap-4 border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4">
+          <div>
+            <p className="page-eyebrow bg-[#34D399]">
+              {isReviewCardMode ? "Yorum Kart Adayı" : "Web Tasarım Adayı"}
+            </p>
+            <h2 className="mt-3 font-heading text-3xl font-black tracking-tight text-[#1E293B]">
+              {business.businessName}
+            </h2>
+            <p className="mt-2 text-sm font-extrabold text-slate-600">
+              {isReviewCardMode
+                ? "Yorum ve güven artırma hizmetleri için değerlendirilebilir."
+                : "Web sitesi ve dijital vitrin teklifi için değerlendirilebilir."}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="btn-secondary min-h-10 px-4">
+            Kapat
+          </button>
+        </div>
+
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <DetailItem label="Kategori" value={business.category} />
+          <DetailItem label="Konum" value={business.location} />
+          <DetailItem label="Puan" value={business.rating.toFixed(1)} />
+          <DetailItem label="Yorum Sayısı" value={String(business.reviewCount)} />
+          <DetailItem
+            label="Web Sitesi"
+            value={business.hasWebsite ? "Var" : "Web sitesi yok"}
+          />
+          <DetailItem label="Telefon" value={business.hasPhone ? "Var" : "Yok"} />
+          <DetailItem label="Fırsat Skoru" value={`⭐ ${business.leadScore}/100`} />
+          <DetailItem label="Potansiyel" value={leadExplanation} />
+          {isReviewCardMode ? (
+            <>
               <DetailItem
                 label="Yorum Kart Skoru"
-                value={`${getReviewCardScore(selectedBusiness)} - ${getReviewCardFitLabel(
-                  getReviewCardScore(selectedBusiness),
+                value={`${reviewCardScore}/100 - ${getReviewCardFitLabel(
+                  reviewCardScore,
                 )}`}
               />
               <DetailItem
                 label="Yorum Kart Aboneliği"
-                value={
-                  isReviewCardSubscriber(selectedBusiness)
-                    ? "Abone"
-                    : "Abone değil"
-                }
+                value={isSubscriber ? "Abone" : "Abone değil"}
               />
-            </div>
-
-            <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
-              <a
-                href={selectedBusiness.mapsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-primary"
-              >
-                Google Maps’te Aç
-              </a>
-              <button
-                type="button"
-                onClick={() => handleAddFavorite(selectedBusiness)}
-                title={isFavorite(selectedBusiness) ? "Favoride" : "Favoriye ekle"}
-                aria-label={isFavorite(selectedBusiness) ? "Favoride" : "Favoriye ekle"}
-                className="heart-button"
-              >
-                {isFavorite(selectedBusiness) ? "❤️" : "♡"}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleReviewCardSubscriber(selectedBusiness)}
-                className="btn-secondary"
-              >
-                {isReviewCardSubscriber(selectedBusiness)
-                  ? "Abonelikten Çıkar"
-                  : "Yorum Kart Abonesi"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedBusiness(null)}
-                className="btn-secondary"
-              >
-                Kapat
-              </button>
-            </div>
-          </section>
+            </>
+          ) : (
+            <DetailItem
+              label="Web Tasarım Skoru"
+              value={`${webDesignScore}/100 - ${getWebDesignFitLabel(
+                webDesignScore,
+              )}`}
+            />
+          )}
         </div>
-      ) : null}
-    </AppShell>
+
+        <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
+          <a
+            href={business.mapsUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-primary"
+          >
+            Google Maps’te Aç
+          </a>
+          <button
+            type="button"
+            onClick={() => onAddFavorite(business)}
+            title={isFavorite ? "Favoride" : "Favoriye ekle"}
+            aria-label={isFavorite ? "Favoride" : "Favoriye ekle"}
+            className="heart-button"
+          >
+            {isFavorite ? "❤️" : "♡"}
+          </button>
+          {isReviewCardMode ? (
+            <button
+              type="button"
+              onClick={() => onToggleSubscriber(business)}
+              className="btn-secondary"
+            >
+              {isSubscriber ? "Abonelikten Çıkar" : "Yorum Kart Abonesi"}
+            </button>
+          ) : null}
+          <button type="button" onClick={onClose} className="btn-secondary">
+            Kapat
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -950,6 +1094,7 @@ function DetailItem({ label, value }: { label: string; value: string }) {
 
 function BusinessActions({
   business,
+  intent,
   isFavorite,
   isSubscriber,
   onAddFavorite,
@@ -957,6 +1102,7 @@ function BusinessActions({
   onOpenDetail,
 }: {
   business: BusinessResult;
+  intent: SelectedIntent;
   isFavorite: boolean;
   isSubscriber: boolean;
   onAddFavorite: (business: BusinessResult) => void;
@@ -974,13 +1120,15 @@ function BusinessActions({
       >
         {isFavorite ? "❤️" : "♡"}
       </button>
-      <button
-        type="button"
-        onClick={() => onAddSubscriber(business)}
-        className={`badge-pop min-h-10 ${isSubscriber ? "bg-[#34D399]" : "bg-white hover:bg-[#FBBF24]"}`}
-      >
-        {isSubscriber ? "Abonelikten Çıkar" : "Yorum Kart"}
-      </button>
+      {intent === "review-card" ? (
+        <button
+          type="button"
+          onClick={() => onAddSubscriber(business)}
+          className={`badge-pop min-h-10 ${isSubscriber ? "bg-[#34D399]" : "bg-white hover:bg-[#FBBF24]"}`}
+        >
+          {isSubscriber ? "Abonelikten Çıkar" : "Yorum Kart"}
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={() => onOpenDetail(business)}
@@ -988,6 +1136,25 @@ function BusinessActions({
       >
         Detay
       </button>
+    </div>
+  );
+}
+
+function ScoreBadge({
+  score,
+  label,
+  color,
+}: {
+  score: number;
+  label: string;
+  color: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="badge-pop" style={{ backgroundColor: color }}>
+        {score}/100
+      </span>
+      <span className="text-xs font-extrabold text-slate-500">{label}</span>
     </div>
   );
 }
@@ -1020,5 +1187,3 @@ function StatusBadge({ active, label }: { active: boolean; label?: string }) {
     </span>
   );
 }
-
-

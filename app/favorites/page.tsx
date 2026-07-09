@@ -6,7 +6,14 @@ import {
   calculateReviewCardScore,
   getReviewCardFitLabel,
 } from "@/lib/review-card-score";
-import { FAVORITES_STORAGE_KEY } from "@/lib/storage-keys";
+import {
+  FAVORITES_STORAGE_KEY,
+  SELECTED_INTENT_STORAGE_KEY,
+} from "@/lib/storage-keys";
+import {
+  calculateWebDesignScore,
+  getWebDesignFitLabel,
+} from "@/lib/web-design-score";
 import type { BusinessResult } from "@/types/business";
 
 type FavoriteBusiness = BusinessResult & {
@@ -14,7 +21,8 @@ type FavoriteBusiness = BusinessResult & {
   tag?: string;
 };
 
-type SortColumn = "rating" | "reviewCount" | "leadScore" | "reviewCardScore";
+type SelectedIntent = "review-card" | "web-design";
+type SortColumn = "rating" | "reviewCount" | "leadScore" | "reviewCardScore" | "webDesignScore";
 type SortDirection = "asc" | "desc";
 
 const tagOptions = [
@@ -26,6 +34,17 @@ const tagOptions = [
   "Satış yapıldı",
   "Uygun değil",
 ];
+
+function getSelectedIntent(): SelectedIntent {
+  if (typeof window === "undefined") {
+    return "review-card";
+  }
+
+  return window.localStorage.getItem(SELECTED_INTENT_STORAGE_KEY) ===
+    "web-design"
+    ? "web-design"
+    : "review-card";
+}
 
 function getFavorites(): FavoriteBusiness[] {
   if (typeof window === "undefined") {
@@ -55,27 +74,50 @@ function getReviewCardScore(business: FavoriteBusiness): number {
   });
 }
 
-function createSalesMessage(business: FavoriteBusiness): string {
-  const websiteText = business.hasWebsite
-    ? "Web siteniz olduğunu gördüm; Google görünürlüğünüzle birlikte daha fazla dönüşüm almanız için birkaç küçük optimizasyon fırsatı olabilir."
-    : "Web siteniz görünmüyor; bu da Google'dan gelen potansiyel müşterileri kaçırmanıza neden olabilir.";
+function getWebDesignScore(business: FavoriteBusiness): number {
+  return calculateWebDesignScore(business);
+}
+
+function createSalesMessage(
+  business: FavoriteBusiness,
+  intent: SelectedIntent,
+): string {
+  if (intent === "web-design") {
+    const websiteText = business.hasWebsite
+      ? "Web siteniz olduğunu gördüm; yine de Google Maps görünürlüğünüzden gelen ziyaretçilerin daha güven veren ve dönüşüm odaklı bir sayfaya yönlenmesi için bazı iyileştirme fırsatları olabilir."
+      : "Google profilinizde web sitesi görünmüyor. Bu durum sizi araştıran müşterilerin güvenini ve iletişime geçme oranını düşürebilir.";
+    const webDesignScore = getWebDesignScore(business);
+
+    return `Merhaba ${business.businessName} ekibi, kısa bir gözlemimi paylaşmak istedim.
+
+Google profilinizde ${business.rating.toFixed(1)} puan ve ${business.reviewCount} yorum görünüyor. ${websiteText}
+
+İşletmeler için modern, hızlı ve mobil uyumlu web siteleri hazırlıyoruz. Amaç; Google Maps’ten gelen müşteriye daha güçlü bir dijital vitrin göstermek ve iletişim taleplerini artırmak. Lead Finder AI analizinde işletmeniz ${webDesignScore}/100 web tasarım uygunluk skoru aldı (${getWebDesignFitLabel(webDesignScore)}).
+
+İsterseniz size ücretsiz kısa bir web görünürlük önerisi paylaşabilirim.`;
+  }
+
   const reviewCardScore = getReviewCardScore(business);
 
   return `Merhaba ${business.businessName} ekibi, kısa bir gözlemimi paylaşmak istedim.
 
-Google profilinizde ${business.rating.toFixed(1)} puan ve ${business.reviewCount} yorum görünüyor. ${websiteText}
+Google profilinizde ${business.rating.toFixed(1)} puan ve ${business.reviewCount} yorum görünüyor. Düzenli yorum toplamak, müşteri güvenini ve Google Maps görünürlüğünü güçlendirebilir.
 
-Biz işletmeler için Google yorumlarını artırma, NFC yorum kartları, Google İşletme Profili optimizasyonu ve dijital pazarlama tarafında destek oluyoruz. Lead Finder AI analizinde işletmeniz ⭐ ${business.leadScore}/100 fırsat skoru ve ${reviewCardScore}/100 yorum kart uygunluk skoru aldı (${getReviewCardFitLabel(reviewCardScore)}).
+Biz işletmelerin müşterilerinden daha kolay Google yorumu toplaması için NFC Yorum Kart sistemi kuruyoruz. Lead Finder AI analizinde işletmeniz ${reviewCardScore}/100 yorum kart uygunluk skoru aldı (${getReviewCardFitLabel(reviewCardScore)}).
 
-İsterseniz size ücretsiz kısa bir iyileştirme önerisi paylaşabilirim.`;
+İsterseniz size ücretsiz kısa bir yorum artırma önerisi paylaşabilirim.`;
 }
 
 export default function FavoritesPage() {
+  const [selectedIntent] = useState<SelectedIntent>(getSelectedIntent);
   const [favorites, setFavorites] = useState<FavoriteBusiness[]>(getFavorites);
-  const [sortColumn, setSortColumn] = useState<SortColumn>("leadScore");
+  const [sortColumn, setSortColumn] = useState<SortColumn>(
+    selectedIntent === "web-design" ? "webDesignScore" : "reviewCardScore",
+  );
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedMessage, setSelectedMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const isReviewCardMode = selectedIntent === "review-card";
 
   const sortedFavorites = useMemo(() => {
     return [...favorites].sort((firstBusiness, secondBusiness) => {
@@ -118,7 +160,7 @@ export default function FavoritesPage() {
   }
 
   function handleCreateMessage(business: FavoriteBusiness) {
-    setSelectedMessage(createSalesMessage(business));
+    setSelectedMessage(createSalesMessage(business, selectedIntent));
     setCopied(false);
   }
 
@@ -147,11 +189,14 @@ export default function FavoritesPage() {
     <AppShell>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
         <header>
-          <p className="page-eyebrow">Favoriler</p>
-          <h1 className="page-title mt-5">Kaydedilen işletmeler</h1>
+          <p className="page-eyebrow">{isReviewCardMode ? "Yorum Kart" : "Web Tasarım"} Modu</p>
+          <h1 className="page-title mt-5">
+            {isReviewCardMode ? "Yorum Kart Favorileri" : "Web Tasarım Favorileri"}
+          </h1>
           <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
-            Satış fırsatı olarak takip etmek istediğin işletmeleri notlar,
-            etiketler ve hazır mesajlarla yönet.
+            {isReviewCardMode
+              ? "Yorum kart satışı için takip etmek istediğin işletmeleri notlar, etiketler ve hazır mesajlarla yönet."
+              : "Web tasarım teklifi sunabileceğin işletmeleri notlar, etiketler ve hazır mesajlarla yönet."}
           </p>
         </header>
 
@@ -199,8 +244,8 @@ export default function FavoritesPage() {
                       onSort={handleSort}
                     />
                     <SortableHeader
-                      label="Yorum Kart Skoru"
-                      column="reviewCardScore"
+                      label={isReviewCardMode ? "Yorum Kart Skoru" : "Web Tasarım Skoru"}
+                      column={isReviewCardMode ? "reviewCardScore" : "webDesignScore"}
                       activeColumn={sortColumn}
                       direction={sortDirection}
                       onSort={handleSort}
@@ -212,6 +257,7 @@ export default function FavoritesPage() {
                 <tbody>
                   {sortedFavorites.map((business) => {
                     const reviewCardScore = getReviewCardScore(business);
+                    const webDesignScore = getWebDesignScore(business);
 
                     return (
                       <tr key={`${business.businessName}-${business.location}`}>
@@ -228,7 +274,19 @@ export default function FavoritesPage() {
                           </span>
                         </td>
                         <td>
-                          <ReviewCardBadge score={reviewCardScore} />
+                          {isReviewCardMode ? (
+                            <ScoreBadge
+                              score={reviewCardScore}
+                              label={getReviewCardFitLabel(reviewCardScore)}
+                              color="#EDE9FE"
+                            />
+                          ) : (
+                            <ScoreBadge
+                              score={webDesignScore}
+                              label={getWebDesignFitLabel(webDesignScore)}
+                              color="#DBEAFE"
+                            />
+                          )}
                         </td>
                         <td>
                           <TagSelect
@@ -256,39 +314,35 @@ export default function FavoritesPage() {
               <div className="rounded-[22px] border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
                 <p className="text-sm font-black text-[#1E293B]">Sırala</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <MobileSortButton
-                    label="Puan"
-                    column="rating"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <MobileSortButton
-                    label="Yorum"
-                    column="reviewCount"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <MobileSortButton
-                    label="Fırsat"
-                    column="leadScore"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <MobileSortButton
-                    label="Yorum Kart"
-                    column="reviewCardScore"
-                    activeColumn={sortColumn}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
+                  {(isReviewCardMode
+                    ? [
+                        ["Puan", "rating"],
+                        ["Yorum", "reviewCount"],
+                        ["Fırsat", "leadScore"],
+                        ["Yorum Kart", "reviewCardScore"],
+                      ]
+                    : [
+                        ["Web Tasarım", "webDesignScore"],
+                        ["Puan", "rating"],
+                        ["Yorum", "reviewCount"],
+                        ["Fırsat", "leadScore"],
+                      ]
+                  ).map(([label, column]) => (
+                    <MobileSortButton
+                      key={column}
+                      label={label}
+                      column={column as SortColumn}
+                      activeColumn={sortColumn}
+                      direction={sortDirection}
+                      onSort={handleSort}
+                    />
+                  ))}
                 </div>
               </div>
 
               {sortedFavorites.map((business) => {
                 const reviewCardScore = getReviewCardScore(business);
+                const webDesignScore = getWebDesignScore(business);
 
                 return (
                   <article
@@ -307,16 +361,29 @@ export default function FavoritesPage() {
                         label="Fırsat Skoru"
                         value={`⭐ ${business.leadScore}/100`}
                       />
-                      <MetricBadge
-                        label="Yorum Kart"
-                        value={`${reviewCardScore}/100`}
-                        helper={getReviewCardFitLabel(reviewCardScore)}
-                      />
+                      {isReviewCardMode ? (
+                        <MetricBadge
+                          label="Yorum Kart"
+                          value={`${reviewCardScore}/100`}
+                          helper={getReviewCardFitLabel(reviewCardScore)}
+                        />
+                      ) : (
+                        <MetricBadge
+                          label="Web Tasarım"
+                          value={`${webDesignScore}/100`}
+                          helper={getWebDesignFitLabel(webDesignScore)}
+                        />
+                      )}
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       <StatusBadge active={business.hasWebsite} label="Web Sitesi" />
                       <StatusBadge active={business.hasPhone} label="Telefon" />
+                      {!business.hasWebsite && !isReviewCardMode ? (
+                        <span className="badge-pop bg-[#FBBF24]">
+                          Web sitesi yok
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="mt-4 grid gap-3">
@@ -419,6 +486,10 @@ function getSortValue(business: FavoriteBusiness, column: SortColumn): number {
 
   if (column === "reviewCardScore") {
     return getReviewCardScore(business);
+  }
+
+  if (column === "webDesignScore") {
+    return getWebDesignScore(business);
   }
 
   return business.leadScore;
@@ -576,13 +647,21 @@ function TagSelect({
   );
 }
 
-function ReviewCardBadge({ score }: { score: number }) {
+function ScoreBadge({
+  score,
+  label,
+  color,
+}: {
+  score: number;
+  label: string;
+  color: string;
+}) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="badge-pop bg-[#EDE9FE]">{score}/100</span>
-      <span className="text-xs font-extrabold text-slate-500">
-        {getReviewCardFitLabel(score)}
+      <span className="badge-pop" style={{ backgroundColor: color }}>
+        {score}/100
       </span>
+      <span className="text-xs font-extrabold text-slate-500">{label}</span>
     </div>
   );
 }

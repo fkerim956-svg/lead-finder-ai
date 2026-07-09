@@ -30,15 +30,8 @@ type SortColumn = "rating" | "reviewCount" | "leadScore" | "reviewCardScore" | "
 type SortDirection = "asc" | "desc";
 
 const tagOptions = [
-  "Yeni Aday",
-  "DM Atılacak",
-  "DM Atıldı",
-  "Cevap Bekleniyor",
-  "İlgileniyor",
-  "Görüşmeye Gidilecek",
-  "Teklif Gönderildi",
-  "Satış Yapıldı",
-  "Uygun Değil",
+  { label: "Durum yok", value: "" },
+  { label: "Görüşmeye Gidilecek", value: "Görüşmeye Gidilecek" },
 ];
 
 function getSelectedIntent(): SelectedIntent {
@@ -303,7 +296,7 @@ export default function FavoritesPage() {
                         </td>
                         <td>
                           <TagSelect
-                            value={business.tag ?? "Etiket yok"}
+                            value={business.tag ?? ""}
                             onChange={(tag) =>
                               handleUpdateFavorite(business, { tag })
                             }
@@ -406,7 +399,7 @@ export default function FavoritesPage() {
                           Etiket
                         </span>
                         <TagSelect
-                          value={business.tag ?? "Etiket yok"}
+                          value={business.tag ?? ""}
                           onChange={(tag) =>
                             handleUpdateFavorite(business, { tag })
                           }
@@ -673,17 +666,19 @@ function TagSelect({
   value: string;
   onChange: (tag: string) => void;
 }) {
-  const options = tagOptions.includes(value) ? tagOptions : [value, ...tagOptions];
+  const selectedValue = tagOptions.some((option) => option.value === value)
+    ? value
+    : "";
 
   return (
     <select
-      value={value}
+      value={selectedValue}
       onChange={(event) => onChange(event.target.value)}
       className="input-pop w-full"
     >
-      {options.map((tag) => (
-        <option key={tag} value={tag}>
-          {tag}
+      {tagOptions.map((option) => (
+        <option key={option.value || "empty"} value={option.value}>
+          {option.label}
         </option>
       ))}
     </select>

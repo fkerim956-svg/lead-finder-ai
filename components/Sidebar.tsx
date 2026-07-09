@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navigationItems = [
-  { label: "Panel", href: "/" },
+  { label: "Dashboard", href: "/dashboard" },
   { label: "Yeni Analiz", href: "/new-analysis" },
   { label: "Sonuçlar", href: "/results" },
   { label: "Favoriler", href: "/favorites" },
@@ -30,8 +30,7 @@ export default function Sidebar() {
 
       <nav className="mt-6 flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
         {navigationItems.map((item) => {
-          const isActive =
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const isActive = pathname.startsWith(item.href);
 
           return (
             <Link

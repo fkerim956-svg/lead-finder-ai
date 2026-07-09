@@ -6,8 +6,11 @@ import { createMapsSearchUrl } from "@/lib/business-normalization";
 import {
   calculateReviewCardScore,
   generateReviewCardMessage,
+  getReviewCardCandidateReasons,
   getReviewCardMessageTypeLabel,
+  getReviewCardPlacementSuggestion,
   getReviewCardRiskLevel,
+  getReviewCardSalesAngle,
   type ReviewCardMessageType,
 } from "@/lib/review-card-score";
 import {
@@ -121,7 +124,14 @@ export default function FavoritesPage() {
     selectedIntent === "web-design" ? "webDesignScore" : "reviewCardScore",
   );
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [selectedMessageBusiness, setSelectedMessageBusiness] =
+    useState<FavoriteBusiness | null>(null);
+  const [selectedMessageType, setSelectedMessageType] =
+    useState<ReviewCardMessageType>("professional-whatsapp");
   const [selectedMessage, setSelectedMessage] = useState("");
+  const [selectedPresentationBusiness, setSelectedPresentationBusiness] =
+    useState<FavoriteBusiness | null>(null);
+  const [presentationSlideIndex, setPresentationSlideIndex] = useState(0);
   const [copied, setCopied] = useState(false);
   const isReviewCardMode = selectedIntent === "review-card";
 
@@ -162,12 +172,35 @@ export default function FavoritesPage() {
     saveFavorites(updatedFavorites);
   }
 
-  function handleCreateMessage(
-    business: FavoriteBusiness,
-    messageType?: ReviewCardMessageType,
-  ) {
-    setSelectedMessage(createSalesMessage(business, selectedIntent, messageType));
+  function handleOpenMessagePanel(business: FavoriteBusiness) {
+    setSelectedMessageBusiness(business);
+    setSelectedMessageType("professional-whatsapp");
+    setSelectedMessage(
+      selectedIntent === "web-design"
+        ? createSalesMessage(business, selectedIntent)
+        : "",
+    );
     setCopied(false);
+  }
+
+  function handleCreateMessage() {
+    if (!selectedMessageBusiness) {
+      return;
+    }
+
+    setSelectedMessage(
+      createSalesMessage(
+        selectedMessageBusiness,
+        selectedIntent,
+        selectedMessageType,
+      ),
+    );
+    setCopied(false);
+  }
+
+  function handleOpenPresentation(business: FavoriteBusiness) {
+    setSelectedPresentationBusiness(business);
+    setPresentationSlideIndex(0);
   }
 
   function handleSort(nextColumn: SortColumn) {
@@ -306,7 +339,8 @@ export default function FavoritesPage() {
                           <FavoriteActions
                             business={business}
                             isReviewCardMode={isReviewCardMode}
-                            onCreateMessage={handleCreateMessage}
+                            onOpenMessage={handleOpenMessagePanel}
+                            onOpenPresentation={handleOpenPresentation}
                             onRemoveFavorite={handleRemoveFavorite}
                           />
                         </td>
@@ -425,7 +459,8 @@ export default function FavoritesPage() {
                       <FavoriteActions
                         business={business}
                         isReviewCardMode={isReviewCardMode}
-                        onCreateMessage={handleCreateMessage}
+                        onOpenMessage={handleOpenMessagePanel}
+                        onOpenPresentation={handleOpenPresentation}
                         onRemoveFavorite={handleRemoveFavorite}
                         stacked
                       />
@@ -438,17 +473,122 @@ export default function FavoritesPage() {
         )}
       </div>
 
-      {selectedMessage ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
-          <section className="hard-shadow-lg w-full max-w-2xl rounded-[28px] border-2 border-[#1E293B] bg-white">
-            <div className="border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4">
-              <p className="page-eyebrow bg-[#34D399]">Hazır Mesaj</p>
-              <h2 className="mt-3 font-heading text-3xl font-black tracking-tight text-[#1E293B]">
-                WhatsApp / DM mesajı
-              </h2>
-            </div>
+      {selectedMessageBusiness ? (
+        <MessageModal
+          business={selectedMessageBusiness}
+          isReviewCardMode={isReviewCardMode}
+          selectedMessageType={selectedMessageType}
+          selectedMessage={selectedMessage}
+          copied={copied}
+          onMessageTypeChange={setSelectedMessageType}
+          onCreateMessage={handleCreateMessage}
+          onCopyMessage={handleCopyMessage}
+          onClose={() => {
+            setSelectedMessageBusiness(null);
+            setSelectedMessage("");
+            setCopied(false);
+          }}
+        />
+      ) : null}
 
-            <div className="p-5">
+      {selectedPresentationBusiness ? (
+        <FieldPresentationModal
+          business={selectedPresentationBusiness}
+          slideIndex={presentationSlideIndex}
+          onPrevious={() =>
+            setPresentationSlideIndex((currentIndex) =>
+              Math.max(currentIndex - 1, 0),
+            )
+          }
+          onNext={() =>
+            setPresentationSlideIndex((currentIndex) =>
+              Math.min(currentIndex + 1, 4),
+            )
+          }
+          onClose={() => {
+            setSelectedPresentationBusiness(null);
+            setPresentationSlideIndex(0);
+          }}
+        />
+      ) : null}    </AppShell>
+  );
+}
+
+function MessageModal({
+  business,
+  isReviewCardMode,
+  selectedMessageType,
+  selectedMessage,
+  copied,
+  onMessageTypeChange,
+  onCreateMessage,
+  onCopyMessage,
+  onClose,
+}: {
+  business: FavoriteBusiness;
+  isReviewCardMode: boolean;
+  selectedMessageType: ReviewCardMessageType;
+  selectedMessage: string;
+  copied: boolean;
+  onMessageTypeChange: (messageType: ReviewCardMessageType) => void;
+  onCreateMessage: () => void;
+  onCopyMessage: () => void;
+  onClose: () => void;
+}) {
+  const messageTypes: ReviewCardMessageType[] = [
+    "short-dm",
+    "professional-whatsapp",
+    "friendly-first-contact",
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
+      <section className="hard-shadow-lg max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-2 border-[#1E293B] bg-white">
+        <div className="border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4">
+          <p className="page-eyebrow bg-[#34D399]">Hazır Mesaj</p>
+          <h2 className="mt-3 font-heading text-3xl font-black tracking-tight text-[#1E293B]">
+            {isReviewCardMode
+              ? "Yorum Kart Mesajı Oluştur"
+              : "Web Tasarım Mesajı"}
+          </h2>
+          <p className="mt-2 text-sm font-extrabold text-slate-600">
+            {business.businessName}
+          </p>
+        </div>
+
+        <div className="grid gap-5 p-5">
+          {isReviewCardMode ? (
+            <div className="rounded-[22px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
+              <label className="grid gap-2">
+                <span className="text-sm font-black text-[#1E293B]">
+                  Mesaj tipi
+                </span>
+                <select
+                  value={selectedMessageType}
+                  onChange={(event) =>
+                    onMessageTypeChange(event.target.value as ReviewCardMessageType)
+                  }
+                  className="input-pop w-full"
+                >
+                  {messageTypes.map((messageType) => (
+                    <option key={messageType} value={messageType}>
+                      {getReviewCardMessageTypeLabel(messageType)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={onCreateMessage}
+                className="btn-primary mt-4 w-full sm:w-auto"
+              >
+                Mesajı Oluştur
+              </button>
+            </div>
+          ) : null}
+
+          {selectedMessage ? (
+            <div>
               <textarea
                 readOnly
                 value={selectedMessage}
@@ -460,27 +600,166 @@ export default function FavoritesPage() {
                 </p>
               ) : null}
             </div>
-
-            <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
-              <button type="button" onClick={handleCopyMessage} className="btn-primary">
-                Kopyala
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedMessage("");
-                  setCopied(false);
-                }}
-                className="btn-secondary"
-              >
-                Kapat
-              </button>
-            </div>
-          </section>
+          ) : (
+            <p className="rounded-2xl border-2 border-[#1E293B] bg-white p-4 text-sm font-extrabold text-[#1E293B]">
+              Mesaj tipini seçip “Mesajı Oluştur” butonuna bas.
+            </p>
+          )}
         </div>
-      ) : null}
-    </AppShell>
+
+        <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCopyMessage}
+            disabled={!selectedMessage}
+            className="btn-primary"
+          >
+            Kopyala
+          </button>
+          <button type="button" onClick={onClose} className="btn-secondary">
+            Kapat
+          </button>
+        </div>
+      </section>
+    </div>
   );
+}
+
+function FieldPresentationModal({
+  business,
+  slideIndex,
+  onPrevious,
+  onNext,
+  onClose,
+}: {
+  business: FavoriteBusiness;
+  slideIndex: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  onClose: () => void;
+}) {
+  const reviewCardScore = getReviewCardScore(business);
+  const candidateReasons = getReviewCardCandidateReasons(business).slice(0, 4);
+  const slides = getPresentationSlides(business, reviewCardScore, candidateReasons);
+  const currentSlide = slides[slideIndex];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/50 px-4 py-5">
+      <section className="hard-shadow-lg flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border-2 border-[#1E293B] bg-[#FFFDF5]">
+        <div className="flex items-start justify-between gap-4 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4">
+          <div>
+            <p className="page-eyebrow bg-white">Sahada Göster</p>
+            <h2 className="mt-3 font-heading text-2xl font-black text-[#1E293B] sm:text-4xl">
+              {business.businessName}
+            </h2>
+          </div>
+          <button type="button" onClick={onClose} className="btn-secondary min-h-10 px-4">
+            Kapat
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5 sm:p-7">
+          <article className="rounded-[28px] border-2 border-[#1E293B] bg-white p-5 shadow-[5px_5px_0_#1E293B] sm:p-8">
+            <p className="badge-pop w-fit bg-[#EDE9FE]">
+              {slideIndex + 1} / {slides.length}
+            </p>
+            <h3 className="mt-5 font-heading text-3xl font-black tracking-tight text-[#1E293B] sm:text-5xl">
+              {currentSlide.title}
+            </h3>
+            <p className="mt-5 text-lg font-bold leading-8 text-[#1E293B]">
+              {currentSlide.content}
+            </p>
+            {currentSlide.details.length > 0 ? (
+              <div className="mt-6 grid gap-3">
+                {currentSlide.details.map((detail) => (
+                  <div
+                    key={detail}
+                    className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-base font-extrabold text-[#1E293B]"
+                  >
+                    {detail}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </article>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={onPrevious}
+            disabled={slideIndex === 0}
+            className="btn-secondary"
+          >
+            Önceki
+          </button>
+          <span className="text-center text-sm font-black text-[#1E293B]">
+            {slideIndex + 1} / {slides.length}
+          </span>
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={slideIndex === slides.length - 1}
+            className="btn-primary"
+          >
+            Sonraki
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function getPresentationSlides(
+  business: FavoriteBusiness,
+  reviewCardScore: number,
+  candidateReasons: string[],
+) {
+  return [
+    {
+      title: "Google’da güven ilk izlenimdir",
+      content:
+        "Müşteriler bir işletmeyi seçmeden önce Google puanına ve yorumlarına bakar. Puan düşükse veya yorumlar zayıfsa, yeni müşterinin güveni azalabilir.",
+      details: [
+        `İşletme: ${business.businessName}`,
+        `Google puanı: ${business.rating.toFixed(1)}`,
+        `Yorum sayısı: ${business.reviewCount}`,
+      ],
+    },
+    {
+      title: "Yorum Kart ne yapar?",
+      content:
+        "Yorum Kart, müşterilerin işletmenizin Google puan ve yorum ekranına kolayca ulaşmasını sağlar.",
+      details: [
+        "1. Müşteri kartı okutur",
+        "2. Google yorum ekranı açılır",
+        "3. Puan ve yorum bırakır",
+      ],
+    },
+    {
+      title: "Neden işe yarar?",
+      content:
+        "Memnun müşteriler çoğu zaman yorum bırakmayı unutuyor. Kart, bu süreci kolaylaştırır ve müşteriyi doğrudan doğru ekrana götürür.",
+      details: [getReviewCardPlacementSuggestion(business)],
+    },
+    {
+      title: "Bu işletme için fırsat",
+      content: getReviewCardSalesAngle(business),
+      details: [
+        `Yorum Kart Skoru: ${reviewCardScore}/100`,
+        `Aday durumu: ${getReviewCardRiskLevel(reviewCardScore)}`,
+        ...candidateReasons,
+      ],
+    },
+    {
+      title: "Kısa kurulum, kolay kullanım",
+      content:
+        "Kart işletmenizin Google yorum sayfasına bağlanır. Müşteriler tek dokunuşla yorum ekranına ulaşır.",
+      details: [
+        "İsterseniz örnek kartı ve nasıl çalıştığını hemen gösterebilirim.",
+      ],
+    },
+  ];
 }
 
 function getSortValue(business: FavoriteBusiness, column: SortColumn): number {
@@ -597,27 +876,36 @@ function FavoriteBusinessSummary({
 function FavoriteActions({
   business,
   isReviewCardMode,
-  onCreateMessage,
+  onOpenMessage,
+  onOpenPresentation,
   onRemoveFavorite,
   stacked = false,
 }: {
   business: FavoriteBusiness;
   isReviewCardMode: boolean;
-  onCreateMessage: (
-    business: FavoriteBusiness,
-    messageType?: ReviewCardMessageType,
-  ) => void;
+  onOpenMessage: (business: FavoriteBusiness) => void;
+  onOpenPresentation: (business: FavoriteBusiness) => void;
   onRemoveFavorite: (business: FavoriteBusiness) => void;
   stacked?: boolean;
 }) {
-  const reviewCardMessageTypes: ReviewCardMessageType[] = [
-    "short-dm",
-    "professional-whatsapp",
-    "friendly-first-contact",
-  ];
-
   return (
     <div className={`flex gap-2 ${stacked ? "flex-col" : "flex-wrap"}`}>
+      <button
+        type="button"
+        onClick={() => onOpenMessage(business)}
+        className={`${stacked ? "w-full" : ""} btn-secondary min-h-11 px-3 text-xs`}
+      >
+        Mesaj Olu?tur
+      </button>
+      {isReviewCardMode ? (
+        <button
+          type="button"
+          onClick={() => onOpenPresentation(business)}
+          className={`${stacked ? "w-full" : ""} btn-primary min-h-11 px-3 text-xs`}
+        >
+          Sahada G?ster
+        </button>
+      ) : null}
       <a
         href={getSafeMapsUrl(business)}
         target="_blank"
@@ -626,39 +914,16 @@ function FavoriteActions({
       >
         Google Maps
       </a>
-      {isReviewCardMode ? (
-        <div className={`grid gap-2 ${stacked ? "w-full" : "min-w-48"}`}>
-          {reviewCardMessageTypes.map((messageType) => (
-            <button
-              key={messageType}
-              type="button"
-              onClick={() => onCreateMessage(business, messageType)}
-              className="btn-secondary min-h-11 px-3 text-xs"
-            >
-              {getReviewCardMessageTypeLabel(messageType)}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onCreateMessage(business)}
-          className={`${stacked ? "w-full" : ""} btn-secondary min-h-11 px-3 text-xs`}
-        >
-          Mesaj Oluştur
-        </button>
-      )}
       <button
         type="button"
         onClick={() => onRemoveFavorite(business)}
         className={`${stacked ? "w-full" : ""} btn-danger min-h-11 px-3 text-xs`}
       >
-        Favoriden Çıkar
+        Favoriden ??kar
       </button>
     </div>
   );
 }
-
 function TagSelect({
   value,
   onChange,

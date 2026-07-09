@@ -280,6 +280,27 @@ export function getReviewCardSectorSalesAngle(
   return salesAngles[sector];
 }
 
+export function getReviewCardPlacementSuggestion(
+  business: ReviewCardBusinessInput,
+): string {
+  const sector = getReviewCardSectorType(business.category ?? "");
+
+  const suggestions: Record<ReviewCardSectorType, string> = {
+    food: "Masada, kasada veya ödeme sonrası kullanılabilir.",
+    gym: "Resepsiyonda veya üyelik çıkışında kullanılabilir.",
+    beauty:
+      "İşlem sonrası ödeme noktasında veya ayna önü masasında kullanılabilir.",
+    health:
+      "Danışma bankosunda veya işlem sonrası çıkış noktasında kullanılabilir.",
+    "real-estate":
+      "Ofiste görüşme sonrası veya müşteri teslim sürecinde kullanılabilir.",
+    retail: "Kasa yanında veya alışveriş sonrası kullanılabilir.",
+    general: "Kasa, danışma veya müşteri çıkış noktasında kullanılabilir.",
+  };
+
+  return suggestions[sector];
+}
+
 export function getReviewCardMessageTypeLabel(
   type: ReviewCardMessageType,
 ): string {

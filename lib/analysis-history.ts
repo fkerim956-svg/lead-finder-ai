@@ -51,10 +51,12 @@ function getAnalysisSignature(analysis: LatestAnalysis): string {
 function normalizeAnalysis(analysis: LatestAnalysis): AnalysisHistoryItem {
   const createdAt = analysis.createdAt || new Date().toISOString();
   const selectedIntent = analysis.selectedIntent ?? getSelectedIntent();
+  const analysisName = analysis.analysisName?.trim() || undefined;
 
   return {
     ...analysis,
     id: analysis.id ?? createAnalysisId(),
+    analysisName,
     createdAt,
     selectedIntent,
     businessCount: analysis.businesses.length,
@@ -162,6 +164,32 @@ export function removeAnalysisFromHistory(id: string): AnalysisHistoryItem[] {
   const nextHistory = getAnalysisHistory().filter(
     (analysis) => analysis.id !== id,
   );
+
+  window.localStorage.setItem(
+    ANALYSIS_HISTORY_STORAGE_KEY,
+    JSON.stringify(nextHistory),
+  );
+
+  return nextHistory;
+}
+
+export function renameAnalysisInHistory(
+  id: string,
+  analysisName: string,
+): AnalysisHistoryItem[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const nextName = analysisName.trim() || undefined;
+  const nextHistory = getAnalysisHistory().map((analysis) =>
+    analysis.id === id ? { ...analysis, analysisName: nextName } : analysis,
+  );
+  const latestAnalysis = getLatestAnalysis();
+
+  if (latestAnalysis?.id === id) {
+    setLatestAnalysis({ ...latestAnalysis, analysisName: nextName });
+  }
 
   window.localStorage.setItem(
     ANALYSIS_HISTORY_STORAGE_KEY,

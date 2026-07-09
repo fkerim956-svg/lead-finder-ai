@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { saveAnalysisToHistory } from "@/lib/analysis-history";
+import { createMapsSearchUrl } from "@/lib/business-normalization";
 import { calculateLeadScore } from "@/lib/lead-score";
 import {
   calculateReviewCardScore,
@@ -147,6 +148,18 @@ function getWebScore(business: BusinessResult): number {
   return calculateWebDesignScore(business);
 }
 
+function getSafeMapsUrl(
+  business: Pick<BusinessResult, "businessName" | "location" | "mapsUrl">,
+): string {
+  return createMapsSearchUrl(
+    business.businessName,
+    business.location,
+    "",
+    "",
+    business.mapsUrl,
+  );
+}
+
 export default function ResultsPage() {
   const [selectedIntent] = useState<SelectedIntent>(getSelectedIntent);
   const [latestAnalysis] = useState<LatestAnalysis | null>(() => {
@@ -258,6 +271,7 @@ export default function ResultsPage() {
         hasWebsite: business.hasWebsite,
         hasPhone: business.hasPhone,
       }),
+      mapsUrl: getSafeMapsUrl(business),
     }));
   }, [latestAnalysis]);
 
@@ -388,7 +402,7 @@ export default function ResultsPage() {
       business.hasPhone ? "Var" : "Yok",
       isReviewCardMode ? getReviewCardScore(business) : getWebScore(business),
       business.leadScore,
-      business.mapsUrl,
+      getSafeMapsUrl(business),
     ]);
 
     const csvContent = [headers, ...rows]
@@ -942,7 +956,7 @@ function BusinessDetailModal({
 
         <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
           <a
-            href={business.mapsUrl}
+            href={getSafeMapsUrl(business)}
             target="_blank"
             rel="noreferrer"
             className="btn-primary"

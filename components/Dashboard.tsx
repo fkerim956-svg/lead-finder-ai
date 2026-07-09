@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   clearAnalysisHistory,
   getAnalysisHistory,
   removeAnalysisFromHistory,
+  renameAnalysisInHistory,
   setLatestAnalysis,
 } from "@/lib/analysis-history";
 import {
@@ -46,9 +47,16 @@ function getIntentLabel(intent: AnalysisHistoryItem["selectedIntent"]): string {
   return "Genel";
 }
 
+function getAnalysisTitle(analysis: AnalysisHistoryItem): string {
+  return analysis.analysisName?.trim() || `${analysis.district} ${analysis.category}`;
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const [history, setHistory] = useState<AnalysisHistoryItem[]>(getAnalysisHistory);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [editingAnalysisId, setEditingAnalysisId] = useState<string | null>(null);
+  const [editingAnalysisName, setEditingAnalysisName] = useState("");
   const [favoritesCount] = useState(() => getStoredBusinessCount(FAVORITES_STORAGE_KEY));
   const [subscriberCount] = useState(() =>
     getStoredBusinessCount(REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY),
@@ -57,6 +65,27 @@ export default function Dashboard() {
     (total, analysis) => total + analysis.businesses.length,
     0,
   );
+  const filteredHistory = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase("tr-TR");
+
+    if (!normalizedQuery) {
+      return history;
+    }
+
+    return history.filter((analysis) => {
+      const searchableText = [
+        getAnalysisTitle(analysis),
+        analysis.city,
+        analysis.district,
+        analysis.category,
+        getIntentLabel(analysis.selectedIntent),
+      ]
+        .join(" ")
+        .toLocaleLowerCase("tr-TR");
+
+      return searchableText.includes(normalizedQuery);
+    });
+  }, [history, searchQuery]);
 
   const stats = [
     {
@@ -93,6 +122,24 @@ export default function Dashboard() {
   function handleClearHistory() {
     clearAnalysisHistory();
     setHistory([]);
+    setEditingAnalysisId(null);
+    setEditingAnalysisName("");
+  }
+
+  function handleStartRename(analysis: AnalysisHistoryItem) {
+    setEditingAnalysisId(analysis.id);
+    setEditingAnalysisName(getAnalysisTitle(analysis));
+  }
+
+  function handleSaveRename(id: string) {
+    setHistory(renameAnalysisInHistory(id, editingAnalysisName));
+    setEditingAnalysisId(null);
+    setEditingAnalysisName("");
+  }
+
+  function handleCancelRename() {
+    setEditingAnalysisId(null);
+    setEditingAnalysisName("");
   }
 
   return (
@@ -158,6 +205,23 @@ export default function Dashboard() {
           ) : null}
         </div>
 
+        {history.length > 0 ? (
+          <div className="border-b-2 border-[#1E293B] bg-[#FFFDF5] p-5">
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-black text-[#1E293B]">
+                Analizlerde ara
+              </span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Üsküdar, cafe, web tasarım..."
+                className="input-pop"
+              />
+            </label>
+          </div>
+        ) : null}
+
         {history.length === 0 ? (
           <div className="p-5">
             <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
@@ -165,35 +229,90 @@ export default function Dashboard() {
               yükleyerek başlayın.
             </p>
           </div>
+        ) : filteredHistory.length === 0 ? (
+          <div className="p-5">
+            <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
+              Aramanızla eşleşen analiz bulunamadı.
+            </p>
+          </div>
         ) : (
           <div className="grid gap-4 p-4">
-            {history.map((analysis) => (
+            {filteredHistory.map((analysis) => (
               <article
                 key={analysis.id}
                 className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]"
               >
                 <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
                   <div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="badge-pop bg-[#34D399]">
-                        {getIntentLabel(analysis.selectedIntent)}
-                      </span>
-                      <span className="badge-pop bg-[#F5F3FF]">
-                        {new Intl.DateTimeFormat("tr-TR", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        }).format(new Date(analysis.createdAt))}
-                      </span>
-                    </div>
-                    <h3 className="mt-3 font-heading text-2xl font-black text-[#1E293B]">
-                      {analysis.city} / {analysis.district}
-                    </h3>
-                    <p className="mt-1 text-sm font-bold text-slate-600">
-                      {analysis.category} · {analysis.businesses.length} işletme
-                    </p>
+                    {editingAnalysisId === analysis.id ? (
+                      <div className="grid max-w-xl gap-3">
+                        <label className="grid gap-2">
+                          <span className="text-sm font-black text-[#1E293B]">
+                            Analiz adı
+                          </span>
+                          <input
+                            type="text"
+                            value={editingAnalysisName}
+                            onChange={(event) =>
+                              setEditingAnalysisName(event.target.value)
+                            }
+                            className="input-pop"
+                          />
+                        </label>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveRename(analysis.id)}
+                            className="btn-primary"
+                          >
+                            Kaydet
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelRename}
+                            className="btn-secondary"
+                          >
+                            Vazgeç
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="font-heading text-2xl font-black text-[#1E293B]">
+                          {getAnalysisTitle(analysis)}
+                        </h3>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className="badge-pop bg-[#F5F3FF]">
+                            {new Intl.DateTimeFormat("tr-TR", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            }).format(new Date(analysis.createdAt))}
+                          </span>
+                          <span className="badge-pop bg-[#34D399]">
+                            {getIntentLabel(analysis.selectedIntent)}
+                          </span>
+                          <span className="badge-pop bg-white">
+                            {analysis.city} / {analysis.district}
+                          </span>
+                          <span className="badge-pop bg-[#FBBF24]">
+                            {analysis.category}
+                          </span>
+                          <span className="badge-pop bg-[#EDE9FE]">
+                            {analysis.businesses.length} işletme
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => handleStartRename(analysis)}
+                      className="btn-secondary"
+                    >
+                      Yeniden Adlandır
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleOpenAnalysis(analysis)}

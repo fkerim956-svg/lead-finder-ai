@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
+import { createMapsSearchUrl } from "@/lib/business-normalization";
 import {
   calculateReviewCardScore,
   getReviewCardFitLabel,
@@ -76,6 +77,16 @@ function getReviewCardScore(business: FavoriteBusiness): number {
 
 function getWebDesignScore(business: FavoriteBusiness): number {
   return calculateWebDesignScore(business);
+}
+
+function getSafeMapsUrl(business: FavoriteBusiness): string {
+  return createMapsSearchUrl(
+    business.businessName,
+    business.location,
+    "",
+    "",
+    business.mapsUrl,
+  );
 }
 
 function createSalesMessage(
@@ -600,7 +611,7 @@ function FavoriteActions({
   return (
     <div className={`flex gap-2 ${stacked ? "flex-col" : "flex-wrap"}`}>
       <a
-        href={business.mapsUrl}
+        href={getSafeMapsUrl(business)}
         target="_blank"
         rel="noreferrer"
         className={`${stacked ? "w-full" : ""} btn-ghost min-h-11 px-3`}

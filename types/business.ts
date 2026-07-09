@@ -8,12 +8,14 @@ export type BusinessResult = {
   hasPhone: boolean;
   leadScore: number;
   mapsUrl: string;
+  priceRange?: string;
 };
 
 export type SelectedIntent = "review-card" | "web-design";
 
 export type LatestAnalysis = {
   id?: string;
+  analysisName?: string;
   country: string;
   city: string;
   district: string;

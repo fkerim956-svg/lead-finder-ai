@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 
 type SystemStatus = {
@@ -9,18 +9,41 @@ type SystemStatus = {
   version: "MVP";
 };
 
-function getSystemStatus(): Promise<SystemStatus> {
-  return fetch("/api/system-status").then((response) => {
-    if (!response.ok) {
-      throw new Error("Sistem durumu alınamadı.");
-    }
-
-    return response.json() as Promise<SystemStatus>;
-  });
-}
+const fallbackSystemStatus: SystemStatus = {
+  googleApiConfigured: false,
+  dataSource: "Demo veri",
+  version: "MVP",
+};
 
 export default function SettingsPage() {
-  const [systemStatus] = useState<Promise<SystemStatus>>(getSystemStatus);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetch("/api/system-status")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Sistem durumu alınamadı.");
+        }
+
+        return response.json() as Promise<SystemStatus>;
+      })
+      .then((status) => {
+        if (isMounted) {
+          setSystemStatus(status);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSystemStatus(fallbackSystemStatus);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <AppShell>
@@ -65,9 +88,9 @@ export default function SettingsPage() {
 function SystemStatusSection({
   systemStatus,
 }: {
-  systemStatus: Promise<SystemStatus>;
+  systemStatus: SystemStatus | null;
 }) {
-  const status = use(systemStatus);
+  const status = systemStatus ?? fallbackSystemStatus;
 
   return (
     <section className="card-pop overflow-hidden">
@@ -80,8 +103,14 @@ function SystemStatusSection({
       <dl className="grid gap-4 p-5 sm:grid-cols-3">
         <StatusItem
           label="Google API"
-          value={status.googleApiConfigured ? "Hazır" : "Bağlı değil"}
-          active={status.googleApiConfigured}
+          value={
+            systemStatus
+              ? status.googleApiConfigured
+                ? "Hazır"
+                : "Bağlı değil"
+              : "Kontrol ediliyor"
+          }
+          active={Boolean(systemStatus?.googleApiConfigured)}
         />
         <StatusItem label="Veri Kaynağı" value={status.dataSource} active />
         <StatusItem label="Sürüm" value={status.version} active />

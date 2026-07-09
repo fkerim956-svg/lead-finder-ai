@@ -30,24 +30,6 @@ function getSelectedIntent(): SelectedIntent | undefined {
     : "review-card";
 }
 
-function getAnalysisSignature(analysis: LatestAnalysis): string {
-  const businessSignature = analysis.businesses
-    .map(
-      (business) =>
-        `${business.businessName}|${business.location}|${business.category}`,
-    )
-    .join("::");
-
-  return [
-    analysis.country,
-    analysis.city,
-    analysis.district,
-    analysis.category,
-    analysis.createdAt,
-    businessSignature,
-  ].join("||");
-}
-
 function normalizeAnalysis(analysis: LatestAnalysis): AnalysisHistoryItem {
   const createdAt = analysis.createdAt || new Date().toISOString();
   const selectedIntent = analysis.selectedIntent ?? getSelectedIntent();
@@ -131,14 +113,9 @@ export function saveAnalysisToHistory(
   }
 
   const history = getAnalysisHistory();
-  const normalizedSignature = getAnalysisSignature(normalizedAnalysis);
-  const withoutDuplicate = history.filter((historyItem) => {
-    if (historyItem.id === normalizedAnalysis.id) {
-      return false;
-    }
-
-    return getAnalysisSignature(historyItem) !== normalizedSignature;
-  });
+  const withoutDuplicate = history.filter(
+    (historyItem) => historyItem.id !== normalizedAnalysis.id,
+  );
 
   const nextHistory = [normalizedAnalysis, ...withoutDuplicate]
     .toSorted(

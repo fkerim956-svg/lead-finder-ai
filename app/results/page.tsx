@@ -132,7 +132,7 @@ function getSelectedIntent(): SelectedIntent {
 }
 
 function getBusinessKey(business: Pick<BusinessResult, "businessName" | "location">) {
-  return `${business.businessName}-${business.location}`;
+  return `${business.businessName.trim().toLocaleLowerCase("tr-TR")}::${business.location.trim().toLocaleLowerCase("tr-TR")}`;
 }
 
 function getReviewCardScore(business: BusinessResult): number {
@@ -424,14 +424,21 @@ export default function ResultsPage() {
 
   function isFavorite(business: BusinessResult): boolean {
     return favorites.some(
-      (favorite) =>
-        favorite.businessName === business.businessName &&
-        favorite.location === business.location,
+      (favorite) => getBusinessKey(favorite) === getBusinessKey(business),
     );
   }
 
-  function handleAddFavorite(business: BusinessResult) {
+  function handleToggleFavorite(business: BusinessResult) {
     if (isFavorite(business)) {
+      const updatedFavorites = favorites.filter(
+        (favorite) => getBusinessKey(favorite) !== getBusinessKey(business),
+      );
+
+      setFavorites(updatedFavorites);
+      window.localStorage.setItem(
+        FAVORITES_STORAGE_KEY,
+        JSON.stringify(updatedFavorites),
+      );
       return;
     }
 
@@ -704,7 +711,7 @@ export default function ResultsPage() {
                           intent={selectedIntent}
                           isFavorite={isFavorite(business)}
                           isSubscriber={isReviewCardSubscriber(business)}
-                          onAddFavorite={handleAddFavorite}
+                          onToggleFavorite={handleToggleFavorite}
                           onAddSubscriber={handleToggleReviewCardSubscriber}
                           onOpenDetail={setSelectedBusiness}
                         />
@@ -766,9 +773,9 @@ export default function ResultsPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleAddFavorite(business)}
-                      title={isFavorite(business) ? "Favoride" : "Favoriye ekle"}
-                      aria-label={isFavorite(business) ? "Favoride" : "Favoriye ekle"}
+                      onClick={() => handleToggleFavorite(business)}
+                      title={isFavorite(business) ? "Favoriden çıkar" : "Favoriye ekle"}
+                      aria-label={isFavorite(business) ? "Favoriden çıkar" : "Favoriye ekle"}
                       className="heart-button shrink-0"
                     >
                       {isFavorite(business) ? "❤️" : "♡"}
@@ -844,7 +851,7 @@ export default function ResultsPage() {
           intent={selectedIntent}
           isFavorite={isFavorite(selectedBusiness)}
           isSubscriber={isReviewCardSubscriber(selectedBusiness)}
-          onAddFavorite={handleAddFavorite}
+          onToggleFavorite={handleToggleFavorite}
           onToggleSubscriber={handleToggleReviewCardSubscriber}
           onClose={() => setSelectedBusiness(null)}
           leadExplanation={getLeadScoreExplanation(selectedBusiness.leadScore)}
@@ -879,7 +886,7 @@ function BusinessDetailModal({
   intent,
   isFavorite,
   isSubscriber,
-  onAddFavorite,
+  onToggleFavorite,
   onToggleSubscriber,
   onClose,
   leadExplanation,
@@ -888,7 +895,7 @@ function BusinessDetailModal({
   intent: SelectedIntent;
   isFavorite: boolean;
   isSubscriber: boolean;
-  onAddFavorite: (business: BusinessResult) => void;
+  onToggleFavorite: (business: BusinessResult) => void;
   onToggleSubscriber: (business: BusinessResult) => void;
   onClose: () => void;
   leadExplanation: string;
@@ -965,9 +972,9 @@ function BusinessDetailModal({
           </a>
           <button
             type="button"
-            onClick={() => onAddFavorite(business)}
-            title={isFavorite ? "Favoride" : "Favoriye ekle"}
-            aria-label={isFavorite ? "Favoride" : "Favoriye ekle"}
+            onClick={() => onToggleFavorite(business)}
+            title={isFavorite ? "Favoriden çıkar" : "Favoriye ekle"}
+            aria-label={isFavorite ? "Favoriden çıkar" : "Favoriye ekle"}
             className="heart-button"
           >
             {isFavorite ? "❤️" : "♡"}
@@ -1126,7 +1133,7 @@ function BusinessActions({
   intent,
   isFavorite,
   isSubscriber,
-  onAddFavorite,
+  onToggleFavorite,
   onAddSubscriber,
   onOpenDetail,
 }: {
@@ -1134,7 +1141,7 @@ function BusinessActions({
   intent: SelectedIntent;
   isFavorite: boolean;
   isSubscriber: boolean;
-  onAddFavorite: (business: BusinessResult) => void;
+  onToggleFavorite: (business: BusinessResult) => void;
   onAddSubscriber: (business: BusinessResult) => void;
   onOpenDetail: (business: BusinessResult) => void;
 }) {
@@ -1142,9 +1149,9 @@ function BusinessActions({
     <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
-        onClick={() => onAddFavorite(business)}
-        title={isFavorite ? "Favoride" : "Favoriye ekle"}
-        aria-label={isFavorite ? "Favoride" : "Favoriye ekle"}
+        onClick={() => onToggleFavorite(business)}
+        title={isFavorite ? "Favoriden çıkar" : "Favoriye ekle"}
+        aria-label={isFavorite ? "Favoriden çıkar" : "Favoriye ekle"}
         className="heart-button"
       >
         {isFavorite ? "❤️" : "♡"}

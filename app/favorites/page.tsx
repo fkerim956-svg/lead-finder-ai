@@ -89,6 +89,10 @@ function getSafeMapsUrl(business: FavoriteBusiness): string {
   );
 }
 
+function getBusinessKey(business: Pick<FavoriteBusiness, "businessName" | "location">) {
+  return `${business.businessName.trim().toLocaleLowerCase("tr-TR")}::${business.location.trim().toLocaleLowerCase("tr-TR")}`;
+}
+
 function createSalesMessage(
   business: FavoriteBusiness,
   intent: SelectedIntent,
@@ -147,9 +151,7 @@ export default function FavoritesPage() {
 
   function handleRemoveFavorite(business: FavoriteBusiness) {
     const updatedFavorites = favorites.filter(
-      (favorite) =>
-        favorite.businessName !== business.businessName ||
-        favorite.location !== business.location,
+      (favorite) => getBusinessKey(favorite) !== getBusinessKey(business),
     );
 
     saveFavorites(updatedFavorites);
@@ -161,8 +163,7 @@ export default function FavoritesPage() {
   ) {
     const updatedFavorites = favorites.map((favorite) => {
       const isSameBusiness =
-        favorite.businessName === business.businessName &&
-        favorite.location === business.location;
+        getBusinessKey(favorite) === getBusinessKey(business);
 
       return isSameBusiness ? { ...favorite, ...updates } : favorite;
     });

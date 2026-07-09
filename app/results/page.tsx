@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
@@ -46,8 +45,6 @@ type SortOption =
   | "reviewCardScore"
   | "webDesignScore";
 type SortDirection = "asc" | "desc";
-
-const allCategoriesOption = "Tüm kategoriler";
 
 const demoBusinesses: Array<Omit<BusinessResult, "leadScore">> = [
   {
@@ -322,18 +319,10 @@ export default function ResultsPage() {
       return [];
     }
   });
-  const [websiteMissingOnly, setWebsiteMissingOnly] = useState(
-    selectedIntent === "web-design",
-  );
-  const [phoneAvailableOnly, setPhoneAvailableOnly] = useState(false);
-  const [excludeReviewCardSubscribers, setExcludeReviewCardSubscribers] =
-    useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(allCategoriesOption);
   const [sortBy, setSortBy] = useState<SortOption>(
     selectedIntent === "web-design" ? "webDesignScore" : "reviewCardScore",
   );
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessResult | null>(null);
   const isReviewCardMode = selectedIntent === "review-card";
@@ -371,65 +360,15 @@ export default function ResultsPage() {
     return new Set(reviewCardSubscribers.map(getBusinessKey));
   }, [reviewCardSubscribers]);
 
-  const filteredBusinesses = useMemo(() => {
-    return businessesWithScore
-      .filter((business) =>
-        selectedCategory === allCategoriesOption
-          ? true
-          : business.category === selectedCategory,
-      )
-      .filter((business) => (websiteMissingOnly ? !business.hasWebsite : true))
-      .filter((business) => (phoneAvailableOnly ? business.hasPhone : true))
-      .filter((business) =>
-        excludeReviewCardSubscribers
-          ? !reviewCardSubscriberKeys.has(getBusinessKey(business))
-          : true,
-      )
-      .toSorted((first, second) => {
-        const directionMultiplier = sortDirection === "asc" ? 1 : -1;
-        const firstValue = getSortValue(first, sortBy);
-        const secondValue = getSortValue(second, sortBy);
+  const sortedBusinesses = useMemo(() => {
+    return businessesWithScore.toSorted((first, second) => {
+      const directionMultiplier = sortDirection === "asc" ? 1 : -1;
+      const firstValue = getSortValue(first, sortBy);
+      const secondValue = getSortValue(second, sortBy);
 
-        return (firstValue - secondValue) * directionMultiplier;
-      });
-  }, [
-    businessesWithScore,
-    excludeReviewCardSubscribers,
-    phoneAvailableOnly,
-    reviewCardSubscriberKeys,
-    selectedCategory,
-    sortBy,
-    sortDirection,
-    websiteMissingOnly,
-  ]);
-
-  const categoryOptions = useMemo(() => {
-    return [
-      allCategoriesOption,
-      ...Array.from(
-        new Set(businessesWithScore.map((business) => business.category)),
-      ).toSorted((first, second) => first.localeCompare(second, "tr")),
-    ];
-  }, [businessesWithScore]);
-
-  const summary = useMemo(
-    () => ({
-      totalBusinesses: businessesWithScore.length,
-      highPotentialLeads: businessesWithScore.filter((business) => business.leadScore >= 75)
-        .length,
-      withoutWebsite: businessesWithScore.filter((business) => !business.hasWebsite).length,
-    }),
-    [businessesWithScore],
-  );
-
-  function handleClearFilters() {
-    setWebsiteMissingOnly(false);
-    setPhoneAvailableOnly(false);
-    setExcludeReviewCardSubscribers(false);
-    setSelectedCategory(allCategoriesOption);
-    setSortBy(isReviewCardMode ? "reviewCardScore" : "webDesignScore");
-    setSortDirection("desc");
-  }
+      return (firstValue - secondValue) * directionMultiplier;
+    });
+  }, [businessesWithScore, sortBy, sortDirection]);
 
   function handleOpenHistoryAnalysis(analysis: AnalysisHistoryItem) {
     const openedAnalysis = setLatestAnalysis(analysis);
@@ -497,7 +436,7 @@ export default function ResultsPage() {
           "Google Maps Linki",
         ];
 
-    const rows = filteredBusinesses.map((business) => [
+    const rows = sortedBusinesses.map((business) => [
       business.businessName,
       business.category,
       business.location,
@@ -710,87 +649,6 @@ export default function ResultsPage() {
           ) : null}
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <SummaryCard label="Toplam İşletme" value={summary.totalBusinesses} color="#FBBF24" />
-          <SummaryCard
-            label="Yüksek Potansiyelli Müşteri Adayı"
-            value={summary.highPotentialLeads}
-            color="#34D399"
-          />
-          <SummaryCard
-            label="Web Sitesi Olmayan"
-            value={summary.withoutWebsite}
-            color="#F472B6"
-          />
-        </section>
-
-        <section className="card-pop overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setIsFilterPanelOpen((isOpen) => !isOpen)}
-            aria-expanded={isFilterPanelOpen}
-            className="flex w-full flex-col gap-3 border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4 text-left transition hover:bg-[#FBBF24] sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div>
-              <h2 className="font-heading text-xl font-black text-[#1E293B]">
-                Filtrele
-              </h2>
-              <p className="mt-1 text-sm font-bold text-slate-600">
-                Kategori, web sitesi ve telefon filtreleri.
-              </p>
-            </div>
-            <span className="badge-pop bg-white">
-              {isFilterPanelOpen ? "Kapat" : "Aç"}
-            </span>
-          </button>
-
-          {isFilterPanelOpen ? (
-            <div className="grid gap-5 p-5">
-              <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-                <FilterField label="Kategori">
-                  <select
-                    value={selectedCategory}
-                    onChange={(event) => setSelectedCategory(event.target.value)}
-                    className="input-pop"
-                  >
-                    {categoryOptions.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-                </FilterField>
-
-                <button
-                  type="button"
-                  onClick={handleClearFilters}
-                  className="btn-secondary w-full md:w-auto"
-                >
-                  Filtreleri Temizle
-                </button>
-              </div>
-
-              <div className="grid gap-3 rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 md:grid-cols-3">
-                <CheckboxField
-                  checked={websiteMissingOnly}
-                  onChange={setWebsiteMissingOnly}
-                  label="Yalnızca web sitesi olmayanlar"
-                />
-                <CheckboxField
-                  checked={phoneAvailableOnly}
-                  onChange={setPhoneAvailableOnly}
-                  label="Yalnızca telefonu olanlar"
-                />
-                <CheckboxField
-                  checked={excludeReviewCardSubscribers}
-                  onChange={setExcludeReviewCardSubscribers}
-                  label="Yorum Kart abonelerini listeden çıkar"
-                />
-              </div>
-            </div>
-          ) : null}
-        </section>
-
         <section className="card-pop overflow-hidden">
           <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -798,14 +656,14 @@ export default function ResultsPage() {
                 İşletme Listesi
               </h2>
               <p className="mt-1 text-sm font-bold text-[#1E293B]">
-                {filteredBusinesses.length} işletme gösteriliyor.
+                {sortedBusinesses.length} işletme gösteriliyor.
               </p>
             </div>
 
             <button
               type="button"
               onClick={handleDownloadCsv}
-              disabled={filteredBusinesses.length === 0}
+              disabled={sortedBusinesses.length === 0}
               className="btn-primary"
             >
               CSV İndir
@@ -862,7 +720,7 @@ export default function ResultsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredBusinesses.map((business) => {
+                {sortedBusinesses.map((business) => {
                   const reviewCardScore = getReviewCardScore(business);
                   const webDesignScore = getWebScore(business);
 
@@ -958,7 +816,7 @@ export default function ResultsPage() {
               </div>
             </div>
 
-            {filteredBusinesses.map((business) => {
+            {sortedBusinesses.map((business) => {
               const reviewCardScore = getReviewCardScore(business);
               const webDesignScore = getWebScore(business);
 
@@ -1259,66 +1117,6 @@ function BusinessDetailModal({
         </div>
       </section>
     </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: string;
-}) {
-  return (
-    <article className="card-pop relative overflow-hidden p-5 transition motion-safe:hover:-translate-y-1">
-      <div
-        className="absolute -right-4 -top-5 h-20 w-20 rotate-12 rounded-[28px] border-2 border-[#1E293B]"
-        style={{ backgroundColor: color }}
-      />
-      <p className="relative text-sm font-extrabold text-slate-600">{label}</p>
-      <p className="relative mt-4 font-heading text-5xl font-black text-[#1E293B]">
-        {value}
-      </p>
-    </article>
-  );
-}
-
-function FilterField({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm font-black text-[#1E293B]">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function CheckboxField({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label className="flex items-center gap-3 text-sm font-extrabold text-[#1E293B]">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-5 w-5 accent-[#8B5CF6]"
-      />
-      {label}
-    </label>
   );
 }
 

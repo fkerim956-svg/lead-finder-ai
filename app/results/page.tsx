@@ -1,10 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
-import { saveAnalysisToHistory } from "@/lib/analysis-history";
+import {
+  getAnalysisHistory,
+  saveAnalysisToHistory,
+  setLatestAnalysis,
+} from "@/lib/analysis-history";
 import { createMapsSearchUrl } from "@/lib/business-normalization";
 import { calculateLeadScore } from "@/lib/lead-score";
 import {
@@ -22,6 +26,7 @@ import {
   getWebDesignFitLabel,
 } from "@/lib/web-design-score";
 import type {
+  AnalysisHistoryItem,
   BusinessResult,
   LatestAnalysis,
   SelectedIntent,
@@ -131,6 +136,84 @@ function getSelectedIntent(): SelectedIntent {
     : "review-card";
 }
 
+function getInitialResultsIntent(): SelectedIntent {
+  if (typeof window === "undefined") {
+    return "review-card";
+  }
+
+  const savedAnalysis = window.localStorage.getItem(LATEST_ANALYSIS_STORAGE_KEY);
+
+  if (savedAnalysis) {
+    try {
+      const latestAnalysis = JSON.parse(savedAnalysis) as LatestAnalysis;
+
+      if (latestAnalysis.selectedIntent) {
+        return latestAnalysis.selectedIntent;
+      }
+    } catch {
+      window.localStorage.removeItem(LATEST_ANALYSIS_STORAGE_KEY);
+    }
+  }
+
+  return getSelectedIntent();
+}
+
+function getSavedLatestAnalysis(): LatestAnalysis | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const savedAnalysis = window.localStorage.getItem(LATEST_ANALYSIS_STORAGE_KEY);
+
+  if (!savedAnalysis) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(savedAnalysis) as LatestAnalysis;
+  } catch {
+    window.localStorage.removeItem(LATEST_ANALYSIS_STORAGE_KEY);
+    return null;
+  }
+}
+
+function getInitialResultsState() {
+  const latestAnalysis = getSavedLatestAnalysis();
+  const selectedIntent = latestAnalysis?.selectedIntent ?? getInitialResultsIntent();
+
+  if (!latestAnalysis) {
+    return {
+      latestAnalysis: null,
+      analysisHistory: getAnalysisHistory(),
+      selectedIntent,
+    };
+  }
+
+  const analysisHistory = getAnalysisHistory();
+  const latestAnalysisExists =
+    latestAnalysis.id &&
+    analysisHistory.some((analysis) => analysis.id === latestAnalysis.id);
+
+  if (latestAnalysisExists) {
+    return {
+      latestAnalysis,
+      analysisHistory,
+      selectedIntent,
+    };
+  }
+
+  const savedAnalysis = saveAnalysisToHistory({
+    ...latestAnalysis,
+    selectedIntent,
+  });
+
+  return {
+    latestAnalysis: savedAnalysis,
+    analysisHistory: getAnalysisHistory(),
+    selectedIntent: savedAnalysis.selectedIntent ?? selectedIntent,
+  };
+}
+
 function getBusinessKey(business: Pick<BusinessResult, "businessName" | "location">) {
   return `${business.businessName.trim().toLocaleLowerCase("tr-TR")}::${business.location.trim().toLocaleLowerCase("tr-TR")}`;
 }
@@ -160,26 +243,38 @@ function getSafeMapsUrl(
   );
 }
 
+function getAnalysisTitle(analysis: Pick<LatestAnalysis, "analysisName" | "district" | "category">) {
+  return analysis.analysisName?.trim() || `${analysis.district} ${analysis.category}`;
+}
+
+function getIntentLabel(intent: SelectedIntent | undefined): string {
+  if (intent === "review-card") {
+    return "Yorum Kart";
+  }
+
+  if (intent === "web-design") {
+    return "Web Tasarım";
+  }
+
+  return "Genel";
+}
+
+function formatAnalysisDate(createdAt: string): string {
+  return new Intl.DateTimeFormat("tr-TR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(createdAt));
+}
+
 export default function ResultsPage() {
-  const [selectedIntent] = useState<SelectedIntent>(getSelectedIntent);
-  const [latestAnalysis] = useState<LatestAnalysis | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-
-    const savedAnalysis = window.localStorage.getItem(LATEST_ANALYSIS_STORAGE_KEY);
-
-    if (!savedAnalysis) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(savedAnalysis) as LatestAnalysis;
-    } catch {
-      window.localStorage.removeItem(LATEST_ANALYSIS_STORAGE_KEY);
-      return null;
-    }
-  });
+  const [initialResultsState] = useState(getInitialResultsState);
+  const [selectedIntent, setSelectedIntent] =
+    useState<SelectedIntent>(initialResultsState.selectedIntent);
+  const [latestAnalysis, setLatestAnalysisState] = useState<LatestAnalysis | null>(
+    initialResultsState.latestAnalysis,
+  );
+  const [analysisHistory, setAnalysisHistory] =
+    useState<AnalysisHistoryItem[]>(initialResultsState.analysisHistory);
   const [favorites, setFavorites] = useState<BusinessResult[]>(() => {
     if (typeof window === "undefined") {
       return [];
@@ -232,19 +327,9 @@ export default function ResultsPage() {
   );
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessResult | null>(null);
   const isReviewCardMode = selectedIntent === "review-card";
-
-  useEffect(() => {
-    if (!latestAnalysis) {
-      return;
-    }
-
-    saveAnalysisToHistory({
-      ...latestAnalysis,
-      selectedIntent: latestAnalysis.selectedIntent ?? selectedIntent,
-    });
-  }, [latestAnalysis, selectedIntent]);
 
   const pageContent = isReviewCardMode
     ? {
@@ -337,6 +422,19 @@ export default function ResultsPage() {
     setSelectedCategory(allCategoriesOption);
     setSortBy(isReviewCardMode ? "reviewCardScore" : "webDesignScore");
     setSortDirection("desc");
+  }
+
+  function handleOpenHistoryAnalysis(analysis: AnalysisHistoryItem) {
+    const openedAnalysis = setLatestAnalysis(analysis);
+    const nextIntent = openedAnalysis.selectedIntent ?? selectedIntent;
+
+    setLatestAnalysisState(openedAnalysis);
+    setSelectedIntent(nextIntent);
+    setSortBy(nextIntent === "web-design" ? "webDesignScore" : "reviewCardScore");
+    setSortDirection("desc");
+    setSelectedBusiness(null);
+    setAnalysisHistory(getAnalysisHistory());
+    setIsHistoryPanelOpen(false);
   }
 
   function handleSort(nextSortBy: SortOption) {
@@ -504,6 +602,100 @@ export default function ResultsPage() {
             Modu Değiştir
           </Link>
         </header>
+
+        <section className="card-pop overflow-hidden">
+          <div className="border-b-2 border-[#1E293B] bg-[#FFFDF5] px-5 py-4">
+            <p className="text-sm font-black text-[#1E293B]">
+              Şu an açık rapor:{" "}
+              <span className="rounded-full border-2 border-[#1E293B] bg-[#FBBF24] px-3 py-1">
+                {latestAnalysis
+                  ? `${getAnalysisTitle(latestAnalysis)} - ${formatAnalysisDate(
+                      latestAnalysis.createdAt,
+                    )}`
+                  : "Demo Sonuçlar"}
+              </span>
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsHistoryPanelOpen((isOpen) => !isOpen)}
+            aria-expanded={isHistoryPanelOpen}
+            className="flex w-full flex-col gap-3 px-5 py-4 text-left transition hover:bg-[#FBBF24] sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <h2 className="font-heading text-xl font-black text-[#1E293B]">
+                Analiz Geçmişi
+              </h2>
+              <p className="mt-1 text-sm font-bold text-slate-600">
+                Önceden oluşturduğun raporları buradan tekrar açabilirsin.
+              </p>
+              <p className="mt-2 text-xs font-black text-[#1E293B]">
+                Toplam kayıtlı analiz: {analysisHistory.length}
+              </p>
+            </div>
+            <span className="badge-pop bg-white">
+              {isHistoryPanelOpen ? "Gizle" : "Eski Analizleri Göster"}
+            </span>
+          </button>
+
+          {isHistoryPanelOpen ? (
+            <div className="grid gap-4 border-t-2 border-[#1E293B] bg-[#FFFDF5] p-4 lg:grid-cols-2">
+              {analysisHistory.length === 0 ? (
+                <p className="rounded-2xl border-2 border-[#1E293B] bg-white p-4 text-sm font-extrabold text-[#1E293B] lg:col-span-2">
+                  Henüz kayıtlı analiz yok. Yeni analiz oluşturduğunda veya
+                  manuel veri yüklediğinde burada görünecek.
+                </p>
+              ) : (
+                analysisHistory.map((analysis) => {
+                  const isCurrentAnalysis =
+                    latestAnalysis?.id && latestAnalysis.id === analysis.id;
+
+                  return (
+                    <article
+                      key={analysis.id}
+                      className={`rounded-[22px] border-2 border-[#1E293B] bg-white p-4 shadow-[3px_3px_0_#1E293B] ${
+                        isCurrentAnalysis ? "outline outline-4 outline-[#34D399]/40" : ""
+                      }`}
+                    >
+                      <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div>
+                          <h3 className="font-heading text-xl font-black text-[#1E293B]">
+                            {getAnalysisTitle(analysis)}
+                          </h3>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="badge-pop bg-[#F5F3FF]">
+                              {formatAnalysisDate(analysis.createdAt)}
+                            </span>
+                            <span className="badge-pop bg-[#34D399]">
+                              {getIntentLabel(analysis.selectedIntent)}
+                            </span>
+                            <span className="badge-pop bg-white">
+                              {analysis.city} / {analysis.district}
+                            </span>
+                            <span className="badge-pop bg-[#FBBF24]">
+                              {analysis.category}
+                            </span>
+                            <span className="badge-pop bg-[#EDE9FE]">
+                              {analysis.businesses.length} işletme
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenHistoryAnalysis(analysis)}
+                          className="btn-primary"
+                        >
+                          {isCurrentAnalysis ? "Açık Rapor" : "Bu Raporu Aç"}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          ) : null}
+        </section>
 
         <section className="grid gap-4 md:grid-cols-3">
           <SummaryCard label="Toplam İşletme" value={summary.totalBusinesses} color="#FBBF24" />

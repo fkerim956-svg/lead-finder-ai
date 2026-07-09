@@ -8,6 +8,7 @@ const navigationItems = [
   { label: "Yeni Analiz", href: "/new-analysis" },
   { label: "Sonuçlar", href: "/results" },
   { label: "Favoriler", href: "/favorites" },
+  { label: "Aboneler", href: "/subscribers" },
   { label: "Ayarlar", href: "/settings" },
 ];
 

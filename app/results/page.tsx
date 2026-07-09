@@ -35,6 +35,7 @@ import type {
   AnalysisHistoryItem,
   BusinessResult,
   LatestAnalysis,
+  ReviewCardSubscriber,
   SelectedIntent,
 } from "@/types/business";
 
@@ -300,7 +301,7 @@ export default function ResultsPage() {
     }
   });
   const [reviewCardSubscribers, setReviewCardSubscribers] = useState<
-    BusinessResult[]
+    ReviewCardSubscriber[]
   >(() => {
     if (typeof window === "undefined") {
       return [];
@@ -315,7 +316,7 @@ export default function ResultsPage() {
     }
 
     try {
-      return JSON.parse(savedSubscribers) as BusinessResult[];
+      return JSON.parse(savedSubscribers) as ReviewCardSubscriber[];
     } catch {
       window.localStorage.removeItem(REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY);
       return [];
@@ -562,7 +563,13 @@ export default function ResultsPage() {
       ? reviewCardSubscribers.filter(
           (subscriber) => getBusinessKey(subscriber) !== getBusinessKey(business),
         )
-      : [...reviewCardSubscribers, business];
+      : [
+          ...reviewCardSubscribers,
+          {
+            ...business,
+            subscribedAt: new Date().toISOString(),
+          },
+        ];
 
     setReviewCardSubscribers(updatedSubscribers);
     window.localStorage.setItem(

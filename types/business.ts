@@ -11,6 +11,12 @@ export type BusinessResult = {
   priceRange?: string;
 };
 
+export type ReviewCardSubscriber = BusinessResult & {
+  subscribedAt?: string;
+  note?: string;
+  status?: string;
+};
+
 export type SelectedIntent = "review-card" | "web-design";
 
 export type LatestAnalysis = {

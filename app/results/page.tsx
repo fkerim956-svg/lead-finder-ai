@@ -13,7 +13,10 @@ import { createMapsSearchUrl } from "@/lib/business-normalization";
 import { calculateLeadScore } from "@/lib/lead-score";
 import {
   calculateReviewCardScore,
+  getReviewCardCandidateReasons,
   getReviewCardFitLabel,
+  getReviewCardRiskLevel,
+  getReviewCardSalesAngle,
 } from "@/lib/review-card-score";
 import {
   FAVORITES_STORAGE_KEY,
@@ -993,7 +996,7 @@ export default function ResultsPage() {
                       <MetricBadge
                         label="Yorum Kart"
                         value={`${reviewCardScore}/100`}
-                        helper={getReviewCardFitLabel(reviewCardScore)}
+                        helper={getReviewCardRiskLevel(reviewCardScore)}
                       />
                     ) : (
                       <MetricBadge
@@ -1095,6 +1098,8 @@ function BusinessDetailModal({
   const isReviewCardMode = intent === "review-card";
   const reviewCardScore = getReviewCardScore(business);
   const webDesignScore = getWebScore(business);
+  const reviewCardReasons = getReviewCardCandidateReasons(business);
+  const reviewCardSalesAngle = getReviewCardSalesAngle(business);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
@@ -1152,6 +1157,47 @@ function BusinessDetailModal({
             />
           )}
         </div>
+
+        {isReviewCardMode ? (
+          <div className="border-t-2 border-[#1E293B] bg-[#FFFDF5] p-5">
+            <div className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-heading text-2xl font-black text-[#1E293B]">
+                    Yorum Kart Aday Analizi
+                  </h3>
+                  <p className="mt-1 text-sm font-bold text-slate-600">
+                    Bu işletmenin Yorum Kart satışı açısından neden uygun
+                    olduğunu hızlıca değerlendir.
+                  </p>
+                </div>
+                <span className="badge-pop bg-[#EDE9FE]">
+                  {reviewCardScore}/100 · {getReviewCardRiskLevel(reviewCardScore)}
+                </span>
+              </div>
+
+              <ul className="mt-4 grid gap-2">
+                {reviewCardReasons.map((reason) => (
+                  <li
+                    key={reason}
+                    className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3 text-sm font-bold text-[#1E293B]"
+                  >
+                    {reason}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-4 rounded-2xl border-2 border-[#1E293B] bg-[#FBBF24] p-4">
+                <p className="text-sm font-black text-[#1E293B]">
+                  Bu işletmeye nasıl yaklaşılır?
+                </p>
+                <p className="mt-2 text-sm font-bold leading-6 text-[#1E293B]">
+                  {reviewCardSalesAngle}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
           <a

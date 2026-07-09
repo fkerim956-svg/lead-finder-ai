@@ -6,6 +6,8 @@ import { createMapsSearchUrl } from "@/lib/business-normalization";
 import {
   calculateReviewCardScore,
   getReviewCardFitLabel,
+  getReviewCardRiskLevel,
+  getReviewCardSalesAngle,
 } from "@/lib/review-card-score";
 import {
   FAVORITES_STORAGE_KEY,
@@ -27,13 +29,15 @@ type SortColumn = "rating" | "reviewCount" | "leadScore" | "reviewCardScore" | "
 type SortDirection = "asc" | "desc";
 
 const tagOptions = [
-  "Etiket yok",
-  "DM atılacak",
-  "Aranacak",
+  "Yeni Aday",
+  "DM Atılacak",
+  "DM Atıldı",
+  "Cevap Bekleniyor",
   "İlgileniyor",
-  "Teklif gönderildi",
-  "Satış yapıldı",
-  "Uygun değil",
+  "Görüşmeye Gidilecek",
+  "Teklif Gönderildi",
+  "Satış Yapıldı",
+  "Uygun Değil",
 ];
 
 function getSelectedIntent(): SelectedIntent {
@@ -113,14 +117,25 @@ Google profilinizde ${business.rating.toFixed(1)} puan ve ${business.reviewCount
   }
 
   const reviewCardScore = getReviewCardScore(business);
+  const salesAngle = getReviewCardSalesAngle(business);
+  const ratingText =
+    business.rating > 0 && business.rating < 4
+      ? `Google puanınız ${business.rating.toFixed(1)} görünüyor; bu noktada daha fazla olumlu yorum güven algısını hızlıca güçlendirebilir.`
+      : `Google profilinizde ${business.rating.toFixed(1)} puan görünüyor.`;
+  const reviewText =
+    business.reviewCount >= 100
+      ? `${business.reviewCount} yorum aktif müşteri trafiği olduğunu gösteriyor.`
+      : business.reviewCount >= 30
+        ? `${business.reviewCount} yorum var; düzenli yorum toplama ile profil daha güçlü hale gelebilir.`
+        : "Yorum sayısı gelişmeye açık görünüyor.";
 
   return `Merhaba ${business.businessName} ekibi, kısa bir gözlemimi paylaşmak istedim.
 
-Google profilinizde ${business.rating.toFixed(1)} puan ve ${business.reviewCount} yorum görünüyor. Düzenli yorum toplamak, müşteri güvenini ve Google Maps görünürlüğünü güçlendirebilir.
+${ratingText} ${reviewText}
 
-Biz işletmelerin müşterilerinden daha kolay Google yorumu toplaması için NFC Yorum Kart sistemi kuruyoruz. Lead Finder AI analizinde işletmeniz ${reviewCardScore}/100 yorum kart uygunluk skoru aldı (${getReviewCardFitLabel(reviewCardScore)}).
+Biz işletmelerin müşterilerinden daha kolay Google puanı ve yorumu toplaması için NFC Yorum Kart sistemi kuruyoruz. Lead Finder AI analizinde işletmeniz ${reviewCardScore}/100 yorum kart uygunluk skoru aldı (${getReviewCardFitLabel(reviewCardScore)}).
 
-İsterseniz size ücretsiz kısa bir yorum artırma önerisi paylaşabilirim.`;
+${salesAngle} İsterseniz size ücretsiz kısa bir yorum artırma önerisi paylaşabilirim.`;
 }
 
 export default function FavoritesPage() {
@@ -289,7 +304,7 @@ export default function FavoritesPage() {
                           {isReviewCardMode ? (
                             <ScoreBadge
                               score={reviewCardScore}
-                              label={getReviewCardFitLabel(reviewCardScore)}
+                              label={getReviewCardRiskLevel(reviewCardScore)}
                               color="#EDE9FE"
                             />
                           ) : (
@@ -377,7 +392,7 @@ export default function FavoritesPage() {
                         <MetricBadge
                           label="Yorum Kart"
                           value={`${reviewCardScore}/100`}
-                          helper={getReviewCardFitLabel(reviewCardScore)}
+                          helper={getReviewCardRiskLevel(reviewCardScore)}
                         />
                       ) : (
                         <MetricBadge
@@ -644,13 +659,15 @@ function TagSelect({
   value: string;
   onChange: (tag: string) => void;
 }) {
+  const options = tagOptions.includes(value) ? tagOptions : [value, ...tagOptions];
+
   return (
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className="input-pop w-full"
     >
-      {tagOptions.map((tag) => (
+      {options.map((tag) => (
         <option key={tag} value={tag}>
           {tag}
         </option>

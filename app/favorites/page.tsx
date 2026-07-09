@@ -5,9 +5,10 @@ import AppShell from "@/components/AppShell";
 import { createMapsSearchUrl } from "@/lib/business-normalization";
 import {
   calculateReviewCardScore,
-  getReviewCardFitLabel,
+  generateReviewCardMessage,
+  getReviewCardMessageTypeLabel,
   getReviewCardRiskLevel,
-  getReviewCardSalesAngle,
+  type ReviewCardMessageType,
 } from "@/lib/review-card-score";
 import {
   FAVORITES_STORAGE_KEY,
@@ -100,6 +101,7 @@ function getBusinessKey(business: Pick<FavoriteBusiness, "businessName" | "locat
 function createSalesMessage(
   business: FavoriteBusiness,
   intent: SelectedIntent,
+  messageType: ReviewCardMessageType = "professional-whatsapp",
 ): string {
   if (intent === "web-design") {
     const websiteText = business.hasWebsite
@@ -116,26 +118,7 @@ Google profilinizde ${business.rating.toFixed(1)} puan ve ${business.reviewCount
 İsterseniz size ücretsiz kısa bir web görünürlük önerisi paylaşabilirim.`;
   }
 
-  const reviewCardScore = getReviewCardScore(business);
-  const salesAngle = getReviewCardSalesAngle(business);
-  const ratingText =
-    business.rating > 0 && business.rating < 4
-      ? `Google puanınız ${business.rating.toFixed(1)} görünüyor; bu noktada daha fazla olumlu yorum güven algısını hızlıca güçlendirebilir.`
-      : `Google profilinizde ${business.rating.toFixed(1)} puan görünüyor.`;
-  const reviewText =
-    business.reviewCount >= 100
-      ? `${business.reviewCount} yorum aktif müşteri trafiği olduğunu gösteriyor.`
-      : business.reviewCount >= 30
-        ? `${business.reviewCount} yorum var; düzenli yorum toplama ile profil daha güçlü hale gelebilir.`
-        : "Yorum sayısı gelişmeye açık görünüyor.";
-
-  return `Merhaba ${business.businessName} ekibi, kısa bir gözlemimi paylaşmak istedim.
-
-${ratingText} ${reviewText}
-
-Biz işletmelerin müşterilerinden daha kolay Google puanı ve yorumu toplaması için NFC Yorum Kart sistemi kuruyoruz. Lead Finder AI analizinde işletmeniz ${reviewCardScore}/100 yorum kart uygunluk skoru aldı (${getReviewCardFitLabel(reviewCardScore)}).
-
-${salesAngle} İsterseniz size ücretsiz kısa bir yorum artırma önerisi paylaşabilirim.`;
+  return generateReviewCardMessage(business, messageType);
 }
 
 export default function FavoritesPage() {
@@ -186,8 +169,11 @@ export default function FavoritesPage() {
     saveFavorites(updatedFavorites);
   }
 
-  function handleCreateMessage(business: FavoriteBusiness) {
-    setSelectedMessage(createSalesMessage(business, selectedIntent));
+  function handleCreateMessage(
+    business: FavoriteBusiness,
+    messageType?: ReviewCardMessageType,
+  ) {
+    setSelectedMessage(createSalesMessage(business, selectedIntent, messageType));
     setCopied(false);
   }
 
@@ -326,6 +312,7 @@ export default function FavoritesPage() {
                         <td>
                           <FavoriteActions
                             business={business}
+                            isReviewCardMode={isReviewCardMode}
                             onCreateMessage={handleCreateMessage}
                             onRemoveFavorite={handleRemoveFavorite}
                           />
@@ -444,6 +431,7 @@ export default function FavoritesPage() {
 
                       <FavoriteActions
                         business={business}
+                        isReviewCardMode={isReviewCardMode}
                         onCreateMessage={handleCreateMessage}
                         onRemoveFavorite={handleRemoveFavorite}
                         stacked
@@ -615,15 +603,26 @@ function FavoriteBusinessSummary({
 
 function FavoriteActions({
   business,
+  isReviewCardMode,
   onCreateMessage,
   onRemoveFavorite,
   stacked = false,
 }: {
   business: FavoriteBusiness;
-  onCreateMessage: (business: FavoriteBusiness) => void;
+  isReviewCardMode: boolean;
+  onCreateMessage: (
+    business: FavoriteBusiness,
+    messageType?: ReviewCardMessageType,
+  ) => void;
   onRemoveFavorite: (business: FavoriteBusiness) => void;
   stacked?: boolean;
 }) {
+  const reviewCardMessageTypes: ReviewCardMessageType[] = [
+    "short-dm",
+    "professional-whatsapp",
+    "friendly-first-contact",
+  ];
+
   return (
     <div className={`flex gap-2 ${stacked ? "flex-col" : "flex-wrap"}`}>
       <a
@@ -634,13 +633,28 @@ function FavoriteActions({
       >
         Google Maps
       </a>
-      <button
-        type="button"
-        onClick={() => onCreateMessage(business)}
-        className={`${stacked ? "w-full" : ""} btn-secondary min-h-11 px-3 text-xs`}
-      >
-        Mesaj Oluştur
-      </button>
+      {isReviewCardMode ? (
+        <div className={`grid gap-2 ${stacked ? "w-full" : "min-w-48"}`}>
+          {reviewCardMessageTypes.map((messageType) => (
+            <button
+              key={messageType}
+              type="button"
+              onClick={() => onCreateMessage(business, messageType)}
+              className="btn-secondary min-h-11 px-3 text-xs"
+            >
+              {getReviewCardMessageTypeLabel(messageType)}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onCreateMessage(business)}
+          className={`${stacked ? "w-full" : ""} btn-secondary min-h-11 px-3 text-xs`}
+        >
+          Mesaj Oluştur
+        </button>
+      )}
       <button
         type="button"
         onClick={() => onRemoveFavorite(business)}

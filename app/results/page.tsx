@@ -17,6 +17,9 @@ import {
   getReviewCardFitLabel,
   getReviewCardRiskLevel,
   getReviewCardSalesAngle,
+  getReviewCardSectorLabel,
+  getReviewCardSectorSalesAngle,
+  getReviewCardSectorType,
 } from "@/lib/review-card-score";
 import {
   FAVORITES_STORAGE_KEY,
@@ -1100,6 +1103,9 @@ function BusinessDetailModal({
   const webDesignScore = getWebScore(business);
   const reviewCardReasons = getReviewCardCandidateReasons(business);
   const reviewCardSalesAngle = getReviewCardSalesAngle(business);
+  const reviewCardSector = getReviewCardSectorType(business.category);
+  const reviewCardSectorLabel = getReviewCardSectorLabel(reviewCardSector);
+  const reviewCardSectorSalesAngle = getReviewCardSectorSalesAngle(business);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
@@ -1193,6 +1199,20 @@ function BusinessDetailModal({
                 </p>
                 <p className="mt-2 text-sm font-bold leading-6 text-[#1E293B]">
                   {reviewCardSalesAngle}
+                </p>
+              </div>
+
+              <div className="mt-4 rounded-2xl border-2 border-[#1E293B] bg-[#EDE9FE] p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-black text-[#1E293B]">
+                    Sektöre Göre Satış Açısı
+                  </p>
+                  <span className="badge-pop bg-white">
+                    {reviewCardSectorLabel}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm font-bold leading-6 text-[#1E293B]">
+                  {reviewCardSectorSalesAngle}
                 </p>
               </div>
             </div>

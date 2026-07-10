@@ -7,3 +7,4 @@ export const SELECTED_INTENT_STORAGE_KEY = "lead-finder-selected-intent";
 export const ANALYSIS_HISTORY_STORAGE_KEY = "lead-finder-analysis-history";
 export const ACCOUNTING_RECORDS_STORAGE_KEY =
   "lead-finder-accounting-records";
+export const NFC_STOCK_STORAGE_KEY = "lead-finder-nfc-stock";

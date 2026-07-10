@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import {
   ACCOUNTING_RECORDS_STORAGE_KEY,
+  NFC_STOCK_STORAGE_KEY,
   REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY,
 } from "@/lib/storage-keys";
 import type {
@@ -12,6 +13,9 @@ import type {
   AccountingRecordType,
   MonthlyLedgerPayment,
   MonthlyPayment,
+  NfcStockData,
+  NfcStockMovement,
+  NfcStockMovementType,
   ReviewCardSubscriber,
 } from "@/types/business";
 
@@ -53,6 +57,17 @@ type OneTimeFormState = CostFormState & {
   oneTimeSaleDate: string;
 };
 
+type StockAddFormState = {
+  quantity: string;
+  unitCost: string;
+  note: string;
+};
+
+type StockAdjustFormState = {
+  newStock: string;
+  note: string;
+};
+
 type NormalizedAccountingRecord = {
   id: string;
   createdAt: string;
@@ -68,6 +83,7 @@ type NormalizedAccountingRecord = {
   monthlyFee: number;
   subscriptionMonths: number;
   oneTimeSaleAmount: number;
+  stockDeducted: boolean;
   nfcCardQuantity: number;
   nfcCardUnitCost: number;
   nfcCardTotalCost: number;
@@ -164,6 +180,26 @@ const initialOneTimeFormState: OneTimeFormState = {
   note: "",
 };
 
+const defaultNfcStock: NfcStockData = {
+  currentStock: 0,
+  criticalStockLevel: 20,
+  totalAdded: 0,
+  totalUsed: 0,
+  lastUnitCost: 0,
+  movements: [],
+};
+
+const initialStockAddFormState: StockAddFormState = {
+  quantity: "",
+  unitCost: "",
+  note: "",
+};
+
+const initialStockAdjustFormState: StockAdjustFormState = {
+  newStock: "",
+  note: "",
+};
+
 function getBusinessKey(
   business: Pick<ReviewCardSubscriber, "businessName" | "location">,
 ) {
@@ -236,6 +272,39 @@ function getInitialSubscribers(): ReviewCardSubscriber[] {
   } catch {
     window.localStorage.removeItem(REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY);
     return [];
+  }
+}
+
+function getInitialNfcStock(): NfcStockData {
+  if (typeof window === "undefined") {
+    return defaultNfcStock;
+  }
+
+  const savedStock = window.localStorage.getItem(NFC_STOCK_STORAGE_KEY);
+
+  if (!savedStock) {
+    return defaultNfcStock;
+  }
+
+  try {
+    const parsedStock = JSON.parse(savedStock) as Partial<NfcStockData>;
+
+    return {
+      currentStock: safeNumber(parsedStock.currentStock),
+      criticalStockLevel:
+        parsedStock.criticalStockLevel !== undefined
+          ? safeNumber(parsedStock.criticalStockLevel)
+          : defaultNfcStock.criticalStockLevel,
+      totalAdded: safeNumber(parsedStock.totalAdded),
+      totalUsed: safeNumber(parsedStock.totalUsed),
+      lastUnitCost: safeNumber(parsedStock.lastUnitCost),
+      movements: Array.isArray(parsedStock.movements)
+        ? parsedStock.movements
+        : [],
+    };
+  } catch {
+    window.localStorage.removeItem(NFC_STOCK_STORAGE_KEY);
+    return defaultNfcStock;
   }
 }
 
@@ -483,6 +552,7 @@ function normalizeAccountingRecord(
     monthlyFee: recordType === "subscription" ? monthlyFee : 0,
     subscriptionMonths,
     oneTimeSaleAmount,
+    stockDeducted: Boolean(record.stockDeducted),
     nfcCardQuantity,
     nfcCardUnitCost,
     nfcCardTotalCost,
@@ -641,16 +711,24 @@ function createAccountingInsights(
 export default function AccountingPage() {
   const [records, setRecords] = useState<AccountingRecord[]>(getInitialRecords);
   const [subscribers] = useState<ReviewCardSubscriber[]>(getInitialSubscribers);
+  const [nfcStock, setNfcStock] = useState<NfcStockData>(getInitialNfcStock);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [isOneTimeModalOpen, setIsOneTimeModalOpen] = useState(false);
+  const [isStockAddModalOpen, setIsStockAddModalOpen] = useState(false);
+  const [isStockAdjustModalOpen, setIsStockAdjustModalOpen] = useState(false);
   const [selectedDetailRecord, setSelectedDetailRecord] =
     useState<NormalizedAccountingRecord | null>(null);
   const [subscriptionFormState, setSubscriptionFormState] =
     useState<SubscriptionFormState>(initialSubscriptionFormState);
   const [oneTimeFormState, setOneTimeFormState] =
     useState<OneTimeFormState>(initialOneTimeFormState);
+  const [stockAddFormState, setStockAddFormState] =
+    useState<StockAddFormState>(initialStockAddFormState);
+  const [stockAdjustFormState, setStockAdjustFormState] =
+    useState<StockAdjustFormState>(initialStockAdjustFormState);
   const [subscriptionFormError, setSubscriptionFormError] = useState("");
   const [oneTimeFormError, setOneTimeFormError] = useState("");
+  const [stockFormError, setStockFormError] = useState("");
   const currentMonthKey = getCurrentMonthKey();
   const currentMonthLabel = getMonthLabel(currentMonthKey);
 
@@ -809,6 +887,64 @@ export default function AccountingPage() {
     );
   }
 
+  function saveNfcStock(updatedStock: NfcStockData) {
+    setNfcStock(updatedStock);
+    window.localStorage.setItem(
+      NFC_STOCK_STORAGE_KEY,
+      JSON.stringify(updatedStock),
+    );
+  }
+
+  function createStockMovement(
+    type: NfcStockMovementType,
+    quantity: number,
+    unitCost: number,
+    note: string,
+    relatedRecordId?: string,
+    relatedBusinessName?: string,
+  ): NfcStockMovement {
+    return {
+      id: createRecordId(),
+      createdAt: new Date().toISOString(),
+      type,
+      quantity,
+      unitCost,
+      note,
+      relatedRecordId,
+      relatedBusinessName,
+    };
+  }
+
+  function getInsufficientStockMessage(requiredQuantity: number) {
+    return `Stok yetersiz. Bu kayıt için ${requiredQuantity} NFC kart gerekiyor, stokta ${nfcStock.currentStock} adet var.`;
+  }
+
+  function deductStockForRecord(
+    record: AccountingRecord,
+    requiredQuantity: number,
+  ): NfcStockData {
+    if (requiredQuantity <= 0) {
+      return nfcStock;
+    }
+
+    return {
+      ...nfcStock,
+      currentStock: nfcStock.currentStock - requiredQuantity,
+      totalUsed: nfcStock.totalUsed + requiredQuantity,
+      movements: [
+        createStockMovement(
+          "use",
+          requiredQuantity,
+          safeNumber(record.nfcCardUnitCost),
+          "Muhasebe kaydında kullanıldı.",
+          record.id,
+          record.businessName,
+        ),
+        ...nfcStock.movements,
+      ],
+    };
+  }
+
   function updateSubscriptionFormField(
     field: keyof SubscriptionFormState,
     value: string,
@@ -847,15 +983,41 @@ export default function AccountingPage() {
   }
 
   function handleOpenSubscriptionModal() {
-    setSubscriptionFormState(initialSubscriptionFormState);
+    setSubscriptionFormState({
+      ...initialSubscriptionFormState,
+      nfcCardUnitCost:
+        nfcStock.lastUnitCost > 0 ? String(nfcStock.lastUnitCost) : "",
+    });
     setSubscriptionFormError("");
     setIsSubscriptionModalOpen(true);
   }
 
   function handleOpenOneTimeModal() {
-    setOneTimeFormState(initialOneTimeFormState);
+    setOneTimeFormState({
+      ...initialOneTimeFormState,
+      nfcCardUnitCost:
+        nfcStock.lastUnitCost > 0 ? String(nfcStock.lastUnitCost) : "",
+    });
     setOneTimeFormError("");
     setIsOneTimeModalOpen(true);
+  }
+
+  function handleOpenStockAddModal() {
+    setStockAddFormState({
+      ...initialStockAddFormState,
+      unitCost: nfcStock.lastUnitCost > 0 ? String(nfcStock.lastUnitCost) : "",
+    });
+    setStockFormError("");
+    setIsStockAddModalOpen(true);
+  }
+
+  function handleOpenStockAdjustModal() {
+    setStockAdjustFormState({
+      newStock: String(nfcStock.currentStock),
+      note: "",
+    });
+    setStockFormError("");
+    setIsStockAdjustModalOpen(true);
   }
 
   function handleSaveSubscriptionRecord() {
@@ -869,8 +1031,19 @@ export default function AccountingPage() {
       return;
     }
 
+    if (
+      calculatedSubscription.nfcCardQuantity > 0 &&
+      nfcStock.currentStock < calculatedSubscription.nfcCardQuantity
+    ) {
+      setSubscriptionFormError(
+        getInsufficientStockMessage(calculatedSubscription.nfcCardQuantity),
+      );
+      return;
+    }
+
+    const recordId = createRecordId();
     const newRecord: AccountingRecord = {
-      id: createRecordId(),
+      id: recordId,
       createdAt: new Date().toISOString(),
       recordType: "subscription",
       subscriptionStartDate: subscriptionFormState.subscriptionStartDate,
@@ -891,11 +1064,17 @@ export default function AccountingPage() {
       setupCost: calculatedSubscription.setupCost,
       otherCost: calculatedSubscription.otherCost,
       totalExpense: calculatedSubscription.totalExpense,
+      stockDeducted: calculatedSubscription.nfcCardQuantity > 0,
       paymentsByMonth: {},
       status: "active",
       note: subscriptionFormState.note.trim(),
     };
 
+    if (calculatedSubscription.nfcCardQuantity > 0) {
+      saveNfcStock(
+        deductStockForRecord(newRecord, calculatedSubscription.nfcCardQuantity),
+      );
+    }
     saveRecords([newRecord, ...records]);
     setIsSubscriptionModalOpen(false);
     setSubscriptionFormState(initialSubscriptionFormState);
@@ -915,8 +1094,19 @@ export default function AccountingPage() {
       return;
     }
 
+    if (
+      calculatedOneTime.nfcCardQuantity > 0 &&
+      nfcStock.currentStock < calculatedOneTime.nfcCardQuantity
+    ) {
+      setOneTimeFormError(
+        getInsufficientStockMessage(calculatedOneTime.nfcCardQuantity),
+      );
+      return;
+    }
+
+    const recordId = createRecordId();
     const newRecord: AccountingRecord = {
-      id: createRecordId(),
+      id: recordId,
       createdAt: new Date().toISOString(),
       recordType: "one-time",
       oneTimeSaleDate:
@@ -939,20 +1129,104 @@ export default function AccountingPage() {
       totalExpense: calculatedOneTime.totalExpense,
       grossProfit: calculatedOneTime.grossProfit,
       profitMargin: calculatedOneTime.profitMargin,
+      stockDeducted: calculatedOneTime.nfcCardQuantity > 0,
       note: oneTimeFormState.note.trim(),
     };
 
+    if (calculatedOneTime.nfcCardQuantity > 0) {
+      saveNfcStock(
+        deductStockForRecord(newRecord, calculatedOneTime.nfcCardQuantity),
+      );
+    }
     saveRecords([newRecord, ...records]);
     setIsOneTimeModalOpen(false);
     setOneTimeFormState(initialOneTimeFormState);
   }
 
   function handleDeleteRecord(recordId: string) {
+    const deletedRecord = records.find((record) => record.id === recordId);
+
     if (selectedDetailRecord?.id === recordId) {
       setSelectedDetailRecord(null);
     }
 
+    if (deletedRecord?.stockDeducted && safeNumber(deletedRecord.nfcCardQuantity) > 0) {
+      const returnedQuantity = safeNumber(deletedRecord.nfcCardQuantity);
+
+      saveNfcStock({
+        ...nfcStock,
+        currentStock: nfcStock.currentStock + returnedQuantity,
+        totalUsed: Math.max(0, nfcStock.totalUsed - returnedQuantity),
+        movements: [
+          createStockMovement(
+            "return",
+            returnedQuantity,
+            safeNumber(deletedRecord.nfcCardUnitCost),
+            "Muhasebe kaydı silindiği için stok iade edildi.",
+            deletedRecord.id,
+            deletedRecord.businessName,
+          ),
+          ...nfcStock.movements,
+        ],
+      });
+    }
+
     saveRecords(records.filter((record) => record.id !== recordId));
+  }
+
+  function handleSaveStockAdd() {
+    const quantity = parseQuantity(stockAddFormState.quantity);
+    const unitCost = parseMoney(stockAddFormState.unitCost);
+
+    if (quantity <= 0) {
+      setStockFormError("Adet 0'dan büyük olmalı.");
+      return;
+    }
+
+    if (unitCost < 0) {
+      setStockFormError("Birim maliyet negatif olamaz.");
+      return;
+    }
+
+    saveNfcStock({
+      ...nfcStock,
+      currentStock: nfcStock.currentStock + quantity,
+      totalAdded: nfcStock.totalAdded + quantity,
+      lastUnitCost: unitCost > 0 ? unitCost : nfcStock.lastUnitCost,
+      movements: [
+        createStockMovement("add", quantity, unitCost, stockAddFormState.note.trim()),
+        ...nfcStock.movements,
+      ],
+    });
+    setIsStockAddModalOpen(false);
+    setStockAddFormState(initialStockAddFormState);
+  }
+
+  function handleSaveStockAdjust() {
+    const nextStock = parseQuantity(stockAdjustFormState.newStock);
+
+    if (nextStock < 0) {
+      setStockFormError("Yeni stok adedi negatif olamaz.");
+      return;
+    }
+
+    const difference = nextStock - nfcStock.currentStock;
+
+    saveNfcStock({
+      ...nfcStock,
+      currentStock: nextStock,
+      movements: [
+        createStockMovement(
+          "adjust",
+          difference,
+          0,
+          stockAdjustFormState.note.trim() || "Manuel stok düzeltmesi",
+        ),
+        ...nfcStock.movements,
+      ],
+    });
+    setIsStockAdjustModalOpen(false);
+    setStockAdjustFormState(initialStockAdjustFormState);
   }
 
   function handleToggleCurrentMonthPayment(recordId: string) {
@@ -1121,6 +1395,14 @@ export default function AccountingPage() {
             />
           </div>
         </section>
+
+        <NfcStockPanel
+          stock={nfcStock}
+          onOpenAdd={handleOpenStockAddModal}
+          onOpenAdjust={handleOpenStockAdjustModal}
+        />
+
+        <StockMovementsPanel movements={nfcStock.movements.slice(0, 8)} />
 
         <section className="card-pop overflow-hidden">
           <div className="border-b-2 border-[#1E293B] bg-[#EDE9FE] px-5 py-4">
@@ -1298,6 +1580,7 @@ export default function AccountingPage() {
           selectedSubscriber={selectedSubscriber}
           calculatedSubscription={calculatedSubscription}
           formError={subscriptionFormError}
+          currentStock={nfcStock.currentStock}
           onUpdateField={updateSubscriptionFormField}
           onSave={handleSaveSubscriptionRecord}
           onClose={() => setIsSubscriptionModalOpen(false)}
@@ -1309,9 +1592,42 @@ export default function AccountingPage() {
           formState={oneTimeFormState}
           calculatedOneTime={calculatedOneTime}
           formError={oneTimeFormError}
+          currentStock={nfcStock.currentStock}
           onUpdateField={updateOneTimeFormField}
           onSave={handleSaveOneTimeRecord}
           onClose={() => setIsOneTimeModalOpen(false)}
+        />
+      ) : null}
+
+      {isStockAddModalOpen ? (
+        <StockAddModal
+          formState={stockAddFormState}
+          formError={stockFormError}
+          onUpdateField={(field, value) => {
+            setStockAddFormState((currentState) => ({
+              ...currentState,
+              [field]: value,
+            }));
+            setStockFormError("");
+          }}
+          onSave={handleSaveStockAdd}
+          onClose={() => setIsStockAddModalOpen(false)}
+        />
+      ) : null}
+
+      {isStockAdjustModalOpen ? (
+        <StockAdjustModal
+          formState={stockAdjustFormState}
+          formError={stockFormError}
+          onUpdateField={(field, value) => {
+            setStockAdjustFormState((currentState) => ({
+              ...currentState,
+              [field]: value,
+            }));
+            setStockFormError("");
+          }}
+          onSave={handleSaveStockAdjust}
+          onClose={() => setIsStockAdjustModalOpen(false)}
         />
       ) : null}
 
@@ -1326,6 +1642,223 @@ export default function AccountingPage() {
   );
 }
 
+function NfcStockPanel({
+  stock,
+  onOpenAdd,
+  onOpenAdjust,
+}: {
+  stock: NfcStockData;
+  onOpenAdd: () => void;
+  onOpenAdjust: () => void;
+}) {
+  const isCritical = stock.currentStock <= stock.criticalStockLevel;
+
+  return (
+    <section className="card-pop overflow-hidden">
+      <div className="flex flex-col gap-4 border-b-2 border-[#1E293B] bg-[#34D399] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="font-heading text-2xl font-black text-[#1E293B]">
+            NFC Kart Stoğu
+          </h2>
+          <p className="mt-1 text-sm font-bold text-[#1E293B]">
+            Satış kayıtlarında kullanılan kart adedi stoktan otomatik düşer.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={onOpenAdd} className="btn-primary">
+            Stok Ekle
+          </button>
+          <button type="button" onClick={onOpenAdjust} className="btn-secondary">
+            Stok Düzelt
+          </button>
+        </div>
+      </div>
+      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricBadge label="Mevcut Stok" value={`${stock.currentStock} adet`} />
+        <MetricBadge label="Toplam Eklenen" value={`${stock.totalAdded} adet`} />
+        <MetricBadge label="Toplam Kullanılan" value={`${stock.totalUsed} adet`} />
+        <MetricBadge
+          label="Kritik Seviye"
+          value={`${stock.criticalStockLevel} adet`}
+        />
+      </div>
+      {isCritical ? (
+        <div className="px-4 pb-4">
+          <p className="rounded-2xl border-2 border-[#1E293B] bg-[#F472B6] p-3 text-sm font-black text-[#1E293B]">
+            NFC kart stoğu kritik seviyede.
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function StockMovementsPanel({
+  movements,
+}: {
+  movements: NfcStockMovement[];
+}) {
+  return (
+    <section className="card-pop overflow-hidden">
+      <div className="border-b-2 border-[#1E293B] bg-[#FFFDF5] px-5 py-4">
+        <h2 className="font-heading text-xl font-black text-[#1E293B]">
+          Son Stok Hareketleri
+        </h2>
+      </div>
+      {movements.length === 0 ? (
+        <EmptyBox text="Henüz stok hareketi yok." />
+      ) : (
+        <div className="grid gap-2 p-4">
+          {movements.map((movement) => (
+            <div
+              key={movement.id}
+              className="grid gap-2 rounded-2xl border-2 border-[#1E293B] bg-white p-3 text-sm font-bold text-[#1E293B] md:grid-cols-[1fr_1fr_auto_1.5fr] md:items-center"
+            >
+              <span>{formatDate(movement.createdAt)}</span>
+              <span>{getStockMovementLabel(movement.type)}</span>
+              <span className="font-black">
+                {getSignedStockQuantity(movement)}
+              </span>
+              <span className="text-slate-600">
+                {movement.relatedBusinessName || movement.note || "Not yok"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function getStockMovementLabel(type: NfcStockMovementType): string {
+  if (type === "add") {
+    return "Stok Eklendi";
+  }
+
+  if (type === "use") {
+    return "Satışta Kullanıldı";
+  }
+
+  if (type === "adjust") {
+    return "Stok Düzeltildi";
+  }
+
+  return "Stok İade Edildi";
+}
+
+function getSignedStockQuantity(movement: NfcStockMovement): string {
+  if (movement.type === "use") {
+    return `-${Math.abs(movement.quantity)} adet`;
+  }
+
+  if (movement.type === "adjust") {
+    return `${movement.quantity > 0 ? "+" : ""}${movement.quantity} adet`;
+  }
+
+  return `+${Math.abs(movement.quantity)} adet`;
+}
+
+function StockAddModal({
+  formState,
+  formError,
+  onUpdateField,
+  onSave,
+  onClose,
+}: {
+  formState: StockAddFormState;
+  formError: string;
+  onUpdateField: (field: keyof StockAddFormState, value: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <ModalFrame title="Stok Ekle" eyebrow="NFC Stok" onClose={onClose}>
+      <div className="grid gap-5 p-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField label="Adet">
+            <NumberInput
+              value={formState.quantity}
+              onChange={(value) => onUpdateField("quantity", value)}
+              min="1"
+              step="1"
+            />
+          </FormField>
+          <FormField label="Birim Maliyet">
+            <NumberInput
+              value={formState.unitCost}
+              onChange={(value) => onUpdateField("unitCost", value)}
+              placeholder="Örn: 8"
+            />
+          </FormField>
+        </div>
+        <FormField label="Not">
+          <textarea
+            value={formState.note}
+            onChange={(event) => onUpdateField("note", event.target.value)}
+            placeholder="Stok alımı notu"
+            className="input-pop min-h-24 w-full"
+          />
+        </FormField>
+        {formError ? <ErrorMessage message={formError} /> : null}
+      </div>
+      <ModalActions>
+        <button type="button" onClick={onSave} className="btn-primary">
+          Stok Ekle
+        </button>
+        <button type="button" onClick={onClose} className="btn-secondary">
+          Kapat
+        </button>
+      </ModalActions>
+    </ModalFrame>
+  );
+}
+
+function StockAdjustModal({
+  formState,
+  formError,
+  onUpdateField,
+  onSave,
+  onClose,
+}: {
+  formState: StockAdjustFormState;
+  formError: string;
+  onUpdateField: (field: keyof StockAdjustFormState, value: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <ModalFrame title="Stok Düzelt" eyebrow="NFC Stok" onClose={onClose}>
+      <div className="grid gap-5 p-5">
+        <FormField label="Yeni stok adedi">
+          <NumberInput
+            value={formState.newStock}
+            onChange={(value) => onUpdateField("newStock", value)}
+            min="0"
+            step="1"
+          />
+        </FormField>
+        <FormField label="Not">
+          <textarea
+            value={formState.note}
+            onChange={(event) => onUpdateField("note", event.target.value)}
+            placeholder="Düzeltme sebebi"
+            className="input-pop min-h-24 w-full"
+          />
+        </FormField>
+        {formError ? <ErrorMessage message={formError} /> : null}
+      </div>
+      <ModalActions>
+        <button type="button" onClick={onSave} className="btn-primary">
+          Stok Düzelt
+        </button>
+        <button type="button" onClick={onClose} className="btn-secondary">
+          Kapat
+        </button>
+      </ModalActions>
+    </ModalFrame>
+  );
+}
+
 function SubscriptionRecordModal({
   subscribers,
   totalSubscriberCount,
@@ -1333,6 +1866,7 @@ function SubscriptionRecordModal({
   selectedSubscriber,
   calculatedSubscription,
   formError,
+  currentStock,
   onUpdateField,
   onSave,
   onClose,
@@ -1343,6 +1877,7 @@ function SubscriptionRecordModal({
   selectedSubscriber: ReviewCardSubscriber | undefined;
   calculatedSubscription: ReturnType<typeof calculateSubscriptionValues>;
   formError: string;
+  currentStock: number;
   onUpdateField: (field: keyof SubscriptionFormState, value: string) => void;
   onSave: () => void;
   onClose: () => void;
@@ -1398,6 +1933,7 @@ function SubscriptionRecordModal({
                   <div className="grid gap-4">
                     <CostAndSubscriptionFields
                       formState={formState}
+                      currentStock={currentStock}
                       onUpdateField={onUpdateField}
                     />
                     <FormField label="Not">
@@ -1471,6 +2007,7 @@ function OneTimeRecordModal({
   formState,
   calculatedOneTime,
   formError,
+  currentStock,
   onUpdateField,
   onSave,
   onClose,
@@ -1478,6 +2015,7 @@ function OneTimeRecordModal({
   formState: OneTimeFormState;
   calculatedOneTime: ReturnType<typeof calculateOneTimeValues>;
   formError: string;
+  currentStock: number;
   onUpdateField: (field: keyof OneTimeFormState, value: string) => void;
   onSave: () => void;
   onClose: () => void;
@@ -1521,7 +2059,11 @@ function OneTimeRecordModal({
           </FormField>
         </div>
 
-        <CostFields formState={formState} onUpdateField={onUpdateField} />
+        <CostFields
+          formState={formState}
+          currentStock={currentStock}
+          onUpdateField={onUpdateField}
+        />
 
         <FormField label="Not">
           <textarea
@@ -1568,9 +2110,11 @@ function OneTimeRecordModal({
 
 function CostAndSubscriptionFields({
   formState,
+  currentStock,
   onUpdateField,
 }: {
   formState: SubscriptionFormState;
+  currentStock: number;
   onUpdateField: (field: keyof SubscriptionFormState, value: string) => void;
 }) {
   return (
@@ -1620,18 +2164,27 @@ function CostAndSubscriptionFields({
           placeholder="Örn: 1000"
         />
       </FormField>
-      <CostFields formState={formState} onUpdateField={onUpdateField} />
+      <CostFields
+        formState={formState}
+        currentStock={currentStock}
+        onUpdateField={onUpdateField}
+      />
     </div>
   );
 }
 
 function CostFields<TField extends string>({
   formState,
+  currentStock,
   onUpdateField,
 }: {
   formState: CostFormState;
+  currentStock: number;
   onUpdateField: (field: TField, value: string) => void;
 }) {
+  const enteredQuantity = parseQuantity(formState.nfcCardQuantity);
+  const exceedsStock = enteredQuantity > currentStock;
+
   return (
     <>
       <FormField label="NFC kart adedi">
@@ -1639,6 +2192,14 @@ function CostFields<TField extends string>({
           value={formState.nfcCardQuantity}
           onChange={(value) => onUpdateField("nfcCardQuantity" as TField, value)}
         />
+        <p className="text-xs font-black text-slate-500">
+          Mevcut stok: {currentStock} adet
+        </p>
+        {exceedsStock ? (
+          <p className="rounded-2xl border-2 border-[#1E293B] bg-[#F472B6] p-2 text-xs font-black text-[#1E293B]">
+            Girilen adet mevcut stoktan fazla.
+          </p>
+        ) : null}
       </FormField>
       <FormField label="1 NFC kart maliyeti">
         <NumberInput

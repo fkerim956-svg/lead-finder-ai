@@ -52,6 +52,28 @@ export type MonthlyLedgerPayment = {
 
 export type AccountingRecordType = "subscription" | "one-time";
 
+export type NfcStockMovementType = "add" | "use" | "adjust" | "return";
+
+export type NfcStockMovement = {
+  id: string;
+  createdAt: string;
+  type: NfcStockMovementType;
+  quantity: number;
+  unitCost: number;
+  note: string;
+  relatedRecordId?: string;
+  relatedBusinessName?: string;
+};
+
+export type NfcStockData = {
+  currentStock: number;
+  criticalStockLevel: number;
+  totalAdded: number;
+  totalUsed: number;
+  lastUnitCost: number;
+  movements: NfcStockMovement[];
+};
+
 export type AccountingRecord = {
   id: string;
   createdAt: string;
@@ -79,6 +101,7 @@ export type AccountingRecord = {
   status?: "active" | "completed" | "cancelled";
   saleAmount?: number;
   oneTimeSaleAmount?: number;
+  stockDeducted?: boolean;
   nfcCardQuantity?: number;
   nfcCardUnitCost?: number;
   nfcCardTotalCost?: number;

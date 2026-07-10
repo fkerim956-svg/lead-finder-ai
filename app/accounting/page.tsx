@@ -7,7 +7,12 @@ import {
   ACCOUNTING_RECORDS_STORAGE_KEY,
   REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY,
 } from "@/lib/storage-keys";
-import type { AccountingRecord, ReviewCardSubscriber } from "@/types/business";
+import type {
+  AccountingRecord,
+  MonthlyLedgerPayment,
+  MonthlyPayment,
+  ReviewCardSubscriber,
+} from "@/types/business";
 
 type PackageName = "Başlangıç" | "Pro" | "Premium" | "Kurumsal";
 
@@ -18,15 +23,16 @@ type PackagePreset = {
   defaultNfcCardQuantity: number;
 };
 
+type SubscriptionStatus = "active" | "completed" | "cancelled";
+
 type SubscriptionFormState = {
   subscriberBusinessKey: string;
   packageName: PackageName;
   setupFee: string;
   monthlyFee: string;
+  subscriptionMonths: string;
   nfcCardQuantity: string;
   nfcCardUnitCost: string;
-  extraServiceRevenue: string;
-  extraServiceNote: string;
   printCost: string;
   designCost: string;
   deliveryCost: string;
@@ -47,34 +53,37 @@ type NormalizedAccountingRecord = {
   packageName: string;
   setupFee: number;
   monthlyFee: number;
+  subscriptionMonths: number;
   nfcCardQuantity: number;
   nfcCardUnitCost: number;
   nfcCardTotalCost: number;
-  extraServiceRevenue: number;
-  extraServiceNote: string;
   printCost: number;
   designCost: number;
   deliveryCost: number;
   setupCost: number;
   otherCost: number;
+  extraServiceRevenue: number;
   totalExpense: number;
-  totalRevenue: number;
-  distributableNet: number;
-  partner1Share: number;
-  partner2Share: number;
-  partner3Share: number;
-  totalDistributed: number;
+  paymentsByMonth: Record<string, MonthlyLedgerPayment>;
+  status: SubscriptionStatus;
+  paidMonthCount: number;
   note: string;
 };
 
+type CurrentMonthDue = {
+  record: NormalizedAccountingRecord;
+  payment: MonthlyLedgerPayment;
+  isActive: boolean;
+};
+
 type AccountingTotals = {
-  totalRevenue: number;
-  totalExpense: number;
-  distributableNet: number;
-  monthlyRecurringRevenue: number;
-  totalPartner1Share: number;
-  totalPartner2Share: number;
-  totalPartner3Share: number;
+  expectedThisMonth: number;
+  receivedThisMonth: number;
+  remainingThisMonth: number;
+  expenseThisMonth: number;
+  partner1ThisMonth: number;
+  partner2ThisMonth: number;
+  partner3ThisMonth: number;
 };
 
 const PACKAGE_PRESETS: PackagePreset[] = [
@@ -111,10 +120,9 @@ const initialFormState: SubscriptionFormState = {
   packageName: defaultPackage.name,
   setupFee: String(defaultPackage.setupFee),
   monthlyFee: String(defaultPackage.monthlyFee),
+  subscriptionMonths: "12",
   nfcCardQuantity: String(defaultPackage.defaultNfcCardQuantity),
   nfcCardUnitCost: "",
-  extraServiceRevenue: "",
-  extraServiceNote: "",
   printCost: "",
   designCost: "",
   deliveryCost: "",
@@ -128,6 +136,22 @@ function getBusinessKey(
   business: Pick<ReviewCardSubscriber, "businessName" | "location">,
 ) {
   return `${business.businessName.trim().toLocaleLowerCase("tr-TR")}::${business.location.trim().toLocaleLowerCase("tr-TR")}`;
+}
+
+function getCurrentMonthKey(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+
+  return `${now.getFullYear()}-${month}`;
+}
+
+function getMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+
+  return new Intl.DateTimeFormat("tr-TR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month - 1, 1));
 }
 
 function getInitialRecords(): AccountingRecord[] {
@@ -173,8 +197,7 @@ function getInitialSubscribers(): ReviewCardSubscriber[] {
 }
 
 function parseMoney(value: string): number {
-  const normalizedValue = value.replace(",", ".").trim();
-  const parsedValue = Number(normalizedValue);
+  const parsedValue = Number(value.replace(",", ".").trim());
 
   return Number.isFinite(parsedValue) ? parsedValue : 0;
 }
@@ -185,14 +208,95 @@ function parseQuantity(value: string): number {
   return Number.isFinite(parsedValue) ? parsedValue : 0;
 }
 
+function parseMonthCount(value: string): number {
+  return Math.max(1, Math.floor(parseQuantity(value) || 1));
+}
+
 function safeNumber(value: number | undefined): number {
   return Number.isFinite(value) ? Number(value) : 0;
+}
+
+function getMonthIndex(monthKey: string): number {
+  const [year, month] = monthKey.split("-").map(Number);
+
+  return year * 12 + month;
+}
+
+function getStartMonthKey(dateValue: string): string {
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return getCurrentMonthKey();
+  }
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function isSameMonth(dateValue: string, monthKey: string): boolean {
+  return getStartMonthKey(dateValue) === monthKey;
+}
+
+function isSubscriptionActive(
+  record: NormalizedAccountingRecord,
+  monthKey: string,
+): boolean {
+  if (record.status === "cancelled" || record.status === "completed") {
+    return false;
+  }
+
+  const startMonthIndex = getMonthIndex(getStartMonthKey(record.subscriptionStartDate));
+  const currentMonthIndex = getMonthIndex(monthKey);
+  const elapsedMonthCount = currentMonthIndex - startMonthIndex;
+
+  return elapsedMonthCount >= 0 && elapsedMonthCount < record.subscriptionMonths;
+}
+
+function createEmptyPayment(amount: number): MonthlyLedgerPayment {
+  return {
+    amount,
+    isPaid: false,
+    paidAt: null,
+  };
+}
+
+function paymentsArrayToLedger(
+  monthlyPayments: MonthlyPayment[] | undefined,
+  startDate: string,
+): Record<string, MonthlyLedgerPayment> {
+  if (!monthlyPayments?.length) {
+    return {};
+  }
+
+  const start = new Date(startDate);
+
+  if (Number.isNaN(start.getTime())) {
+    return {};
+  }
+
+  return monthlyPayments.reduce<Record<string, MonthlyLedgerPayment>>(
+    (ledger, payment) => {
+      const paymentDate = new Date(
+        start.getFullYear(),
+        start.getMonth() + payment.monthIndex - 1,
+        1,
+      );
+      const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, "0")}`;
+      ledger[monthKey] = {
+        amount: safeNumber(payment.amount),
+        isPaid: Boolean(payment.isPaid),
+        paidAt: payment.paidAt || null,
+      };
+
+      return ledger;
+    },
+    {},
+  );
 }
 
 function calculateSubscriptionValues(formState: SubscriptionFormState) {
   const setupFee = parseMoney(formState.setupFee);
   const monthlyFee = parseMoney(formState.monthlyFee);
-  const extraServiceRevenue = parseMoney(formState.extraServiceRevenue);
+  const subscriptionMonths = parseMonthCount(formState.subscriptionMonths);
   const nfcCardQuantity = parseQuantity(formState.nfcCardQuantity);
   const nfcCardUnitCost = parseMoney(formState.nfcCardUnitCost);
   const nfcCardTotalCost = nfcCardQuantity * nfcCardUnitCost;
@@ -201,7 +305,6 @@ function calculateSubscriptionValues(formState: SubscriptionFormState) {
   const deliveryCost = parseMoney(formState.deliveryCost);
   const setupCost = parseMoney(formState.setupCost);
   const otherCost = parseMoney(formState.otherCost);
-  const totalRevenue = setupFee + monthlyFee + extraServiceRevenue;
   const totalExpense =
     nfcCardTotalCost +
     printCost +
@@ -209,15 +312,15 @@ function calculateSubscriptionValues(formState: SubscriptionFormState) {
     deliveryCost +
     setupCost +
     otherCost;
-  const partner1Share = totalRevenue * 0.7 - totalExpense;
-  const partner2Share = totalRevenue * 0.2;
-  const partner3Share = totalRevenue * 0.1;
-  const totalDistributed = partner1Share + partner2Share + partner3Share;
+  const firstMonthRevenue = setupFee + monthlyFee;
+  const partner1Share = firstMonthRevenue * 0.7 - totalExpense;
+  const partner2Share = firstMonthRevenue * 0.2;
+  const partner3Share = firstMonthRevenue * 0.1;
 
   return {
     setupFee,
     monthlyFee,
-    extraServiceRevenue,
+    subscriptionMonths,
     nfcCardQuantity,
     nfcCardUnitCost,
     nfcCardTotalCost,
@@ -226,36 +329,30 @@ function calculateSubscriptionValues(formState: SubscriptionFormState) {
     deliveryCost,
     setupCost,
     otherCost,
-    totalRevenue,
     totalExpense,
-    distributableNet: totalRevenue - totalExpense,
+    firstMonthRevenue,
+    distributableThisMonth: firstMonthRevenue - totalExpense,
     partner1Share,
     partner2Share,
     partner3Share,
-    totalDistributed,
   };
 }
 
 function normalizeAccountingRecord(
   record: AccountingRecord,
 ): NormalizedAccountingRecord {
-  const hasSubscriptionFields =
-    record.setupFee !== undefined ||
-    record.monthlyFee !== undefined ||
-    record.totalRevenue !== undefined;
   const legacySaleAmount = safeNumber(record.saleAmount);
-  const setupFee = hasSubscriptionFields
-    ? safeNumber(record.setupFee)
-    : legacySaleAmount;
-  const monthlyFee = safeNumber(record.monthlyFee);
-  const extraServiceRevenue = safeNumber(record.extraServiceRevenue);
+  const setupFee =
+    record.setupFee !== undefined ? safeNumber(record.setupFee) : legacySaleAmount;
+  const monthlyFee =
+    record.monthlyFee !== undefined ? safeNumber(record.monthlyFee) : legacySaleAmount;
+  const subscriptionMonths = Math.max(1, Math.floor(record.subscriptionMonths || 1));
   const nfcCardQuantity = safeNumber(record.nfcCardQuantity);
   const nfcCardUnitCost = safeNumber(record.nfcCardUnitCost);
-  const calculatedNfcTotal = nfcCardQuantity * nfcCardUnitCost;
   const nfcCardTotalCost =
     record.nfcCardTotalCost !== undefined
       ? safeNumber(record.nfcCardTotalCost)
-      : calculatedNfcTotal;
+      : nfcCardQuantity * nfcCardUnitCost;
   const printCost = safeNumber(record.printCost);
   const designCost = safeNumber(record.designCost);
   const deliveryCost = safeNumber(record.deliveryCost);
@@ -270,22 +367,21 @@ function normalizeAccountingRecord(
     otherCost;
   const totalExpense =
     calculatedExpense > 0 ? calculatedExpense : safeNumber(record.totalCost);
-  const totalRevenue =
-    hasSubscriptionFields || legacySaleAmount === 0
-      ? setupFee + monthlyFee + extraServiceRevenue
-      : legacySaleAmount;
-  const partner1Share = totalRevenue * 0.7 - totalExpense;
-  const partner2Share = totalRevenue * 0.2;
-  const partner3Share = totalRevenue * 0.1;
-  const totalDistributed = partner1Share + partner2Share + partner3Share;
+  const subscriptionStartDate =
+    record.subscriptionStartDate ||
+    record.saleDate ||
+    record.createdAt.slice(0, 10);
+  const paymentsByMonth =
+    record.paymentsByMonth ||
+    paymentsArrayToLedger(record.monthlyPayments, subscriptionStartDate);
+  const paidMonthCount = Object.values(paymentsByMonth).filter(
+    (payment) => payment.isPaid,
+  ).length;
 
   return {
     id: record.id,
     createdAt: record.createdAt,
-    subscriptionStartDate:
-      record.subscriptionStartDate ||
-      record.saleDate ||
-      record.createdAt.slice(0, 10),
+    subscriptionStartDate,
     subscriberBusinessKey:
       record.subscriberBusinessKey ||
       getBusinessKey({
@@ -298,23 +394,20 @@ function normalizeAccountingRecord(
     packageName: record.packageName || "Eski Kayıt",
     setupFee,
     monthlyFee,
+    subscriptionMonths,
     nfcCardQuantity,
     nfcCardUnitCost,
     nfcCardTotalCost,
-    extraServiceRevenue,
-    extraServiceNote: record.extraServiceNote || "",
     printCost,
     designCost,
     deliveryCost,
     setupCost,
     otherCost,
+    extraServiceRevenue: safeNumber(record.extraServiceRevenue),
     totalExpense,
-    totalRevenue,
-    distributableNet: totalRevenue - totalExpense,
-    partner1Share,
-    partner2Share,
-    partner3Share,
-    totalDistributed,
+    paymentsByMonth,
+    status: record.status || "active",
+    paidMonthCount,
     note: record.note || "",
   };
 }
@@ -354,6 +447,8 @@ export default function AccountingPage() {
   const [formState, setFormState] =
     useState<SubscriptionFormState>(initialFormState);
   const [formError, setFormError] = useState("");
+  const currentMonthKey = getCurrentMonthKey();
+  const currentMonthLabel = getMonthLabel(currentMonthKey);
 
   const normalizedRecords = useMemo(
     () => records.map(normalizeAccountingRecord),
@@ -384,34 +479,6 @@ export default function AccountingPage() {
     [formState],
   );
 
-  const totals = useMemo<AccountingTotals>(() => {
-    return normalizedRecords.reduce(
-      (currentTotals, record) => ({
-        totalRevenue: currentTotals.totalRevenue + record.totalRevenue,
-        totalExpense: currentTotals.totalExpense + record.totalExpense,
-        distributableNet:
-          currentTotals.distributableNet + record.distributableNet,
-        monthlyRecurringRevenue:
-          currentTotals.monthlyRecurringRevenue + record.monthlyFee,
-        totalPartner1Share:
-          currentTotals.totalPartner1Share + record.partner1Share,
-        totalPartner2Share:
-          currentTotals.totalPartner2Share + record.partner2Share,
-        totalPartner3Share:
-          currentTotals.totalPartner3Share + record.partner3Share,
-      }),
-      {
-        totalRevenue: 0,
-        totalExpense: 0,
-        distributableNet: 0,
-        monthlyRecurringRevenue: 0,
-        totalPartner1Share: 0,
-        totalPartner2Share: 0,
-        totalPartner3Share: 0,
-      },
-    );
-  }, [normalizedRecords]);
-
   const sortedRecords = useMemo(() => {
     return [...normalizedRecords].sort(
       (firstRecord, secondRecord) =>
@@ -419,6 +486,53 @@ export default function AccountingPage() {
         new Date(firstRecord.subscriptionStartDate).getTime(),
     );
   }, [normalizedRecords]);
+
+  const currentMonthDues = useMemo<CurrentMonthDue[]>(() => {
+    return sortedRecords
+      .map((record) => ({
+        record,
+        payment:
+          record.paymentsByMonth[currentMonthKey] ||
+          createEmptyPayment(record.monthlyFee),
+        isActive: isSubscriptionActive(record, currentMonthKey),
+      }))
+      .filter((item) => item.isActive);
+  }, [currentMonthKey, sortedRecords]);
+
+  const totals = useMemo<AccountingTotals>(() => {
+    const expectedThisMonth = currentMonthDues.reduce(
+      (total, item) => total + item.record.monthlyFee,
+      0,
+    );
+    const receivedMonthlyThisMonth = currentMonthDues
+      .filter((item) => item.payment.isPaid)
+      .reduce((total, item) => total + item.payment.amount, 0);
+    const setupAndExtraThisMonth = sortedRecords
+      .filter((record) => isSameMonth(record.subscriptionStartDate, currentMonthKey))
+      .reduce(
+        (total, record) =>
+          total + record.setupFee + record.extraServiceRevenue,
+        0,
+      );
+    const expenseThisMonth = sortedRecords
+      .filter((record) => isSameMonth(record.subscriptionStartDate, currentMonthKey))
+      .reduce((total, record) => total + record.totalExpense, 0);
+    const receivedThisMonth =
+      receivedMonthlyThisMonth + setupAndExtraThisMonth;
+    const remainingThisMonth = currentMonthDues
+      .filter((item) => !item.payment.isPaid)
+      .reduce((total, item) => total + item.record.monthlyFee, 0);
+
+    return {
+      expectedThisMonth,
+      receivedThisMonth,
+      remainingThisMonth,
+      expenseThisMonth,
+      partner1ThisMonth: receivedThisMonth * 0.7 - expenseThisMonth,
+      partner2ThisMonth: receivedThisMonth * 0.2,
+      partner3ThisMonth: receivedThisMonth * 0.1,
+    };
+  }, [currentMonthDues, currentMonthKey, sortedRecords]);
 
   function saveRecords(updatedRecords: AccountingRecord[]) {
     setRecords(updatedRecords);
@@ -482,22 +596,18 @@ export default function AccountingPage() {
       packageName: formState.packageName,
       setupFee: calculatedSubscription.setupFee,
       monthlyFee: calculatedSubscription.monthlyFee,
+      subscriptionMonths: calculatedSubscription.subscriptionMonths,
       nfcCardQuantity: calculatedSubscription.nfcCardQuantity,
       nfcCardUnitCost: calculatedSubscription.nfcCardUnitCost,
       nfcCardTotalCost: calculatedSubscription.nfcCardTotalCost,
-      extraServiceRevenue: calculatedSubscription.extraServiceRevenue,
-      extraServiceNote: formState.extraServiceNote.trim(),
       printCost: calculatedSubscription.printCost,
       designCost: calculatedSubscription.designCost,
       deliveryCost: calculatedSubscription.deliveryCost,
       setupCost: calculatedSubscription.setupCost,
       otherCost: calculatedSubscription.otherCost,
       totalExpense: calculatedSubscription.totalExpense,
-      totalRevenue: calculatedSubscription.totalRevenue,
-      partner1Share: calculatedSubscription.partner1Share,
-      partner2Share: calculatedSubscription.partner2Share,
-      partner3Share: calculatedSubscription.partner3Share,
-      totalDistributed: calculatedSubscription.totalDistributed,
+      paymentsByMonth: {},
+      status: "active",
       note: formState.note.trim(),
     };
 
@@ -508,6 +618,32 @@ export default function AccountingPage() {
 
   function handleDeleteRecord(recordId: string) {
     saveRecords(records.filter((record) => record.id !== recordId));
+  }
+
+  function handleMarkCurrentMonthPaid(recordId: string) {
+    const updatedRecords = records.map((record) => {
+      if (record.id !== recordId) {
+        return record;
+      }
+
+      const normalizedRecord = normalizeAccountingRecord(record);
+
+      return {
+        ...record,
+        paymentsByMonth: {
+          ...normalizedRecord.paymentsByMonth,
+          [currentMonthKey]: {
+            amount: normalizedRecord.monthlyFee,
+            isPaid: true,
+            paidAt:
+              normalizedRecord.paymentsByMonth[currentMonthKey]?.paidAt ||
+              new Date().toISOString(),
+          },
+        },
+      };
+    });
+
+    saveRecords(updatedRecords);
   }
 
   function escapeCsvValue(value: string | number): string {
@@ -528,51 +664,39 @@ export default function AccountingPage() {
     const headers = [
       "İşletme",
       "Konum",
-      "Abonelik Başlangıcı",
       "Paket",
-      "Kurulum Ücreti",
+      "Başlangıç Tarihi",
+      "Durum",
       "Aylık Ücret",
-      "Ek Hizmet Geliri",
+      "Anlaşma Süresi",
+      "Kurulum Ücreti",
       "NFC Kart Adedi",
-      "NFC Birim Maliyeti",
       "NFC Toplam Maliyet",
-      "Baskı Maliyeti",
-      "Tasarım Maliyeti",
-      "Teslimat/Yol Maliyeti",
-      "Kurulum Maliyeti",
-      "Diğer Gider",
-      "Toplam Gelir",
       "Toplam Gider",
-      "Dağıtılabilir Net",
-      "1. Kişi Payı",
-      "2. Kişi Payı",
-      "3. Kişi Payı",
+      "Bu Ay Ödendi mi",
+      "Bu Ay Tahsilat",
       "Not",
     ];
-    const rows = sortedRecords.map((record) => [
-      record.businessName,
-      record.location,
-      record.subscriptionStartDate,
-      record.packageName,
-      record.setupFee,
-      record.monthlyFee,
-      record.extraServiceRevenue,
-      record.nfcCardQuantity,
-      record.nfcCardUnitCost,
-      record.nfcCardTotalCost,
-      record.printCost,
-      record.designCost,
-      record.deliveryCost,
-      record.setupCost,
-      record.otherCost,
-      record.totalRevenue,
-      record.totalExpense,
-      record.distributableNet,
-      record.partner1Share,
-      record.partner2Share,
-      record.partner3Share,
-      record.note,
-    ]);
+    const rows = sortedRecords.map((record) => {
+      const currentPayment = record.paymentsByMonth[currentMonthKey];
+
+      return [
+        record.businessName,
+        record.location,
+        record.packageName,
+        record.subscriptionStartDate,
+        record.status,
+        record.monthlyFee,
+        record.subscriptionMonths,
+        record.setupFee,
+        record.nfcCardQuantity,
+        record.nfcCardTotalCost,
+        record.totalExpense,
+        currentPayment?.isPaid ? "Evet" : "Hayır",
+        currentPayment?.isPaid ? currentPayment.amount : 0,
+        record.note,
+      ];
+    });
     const csvContent = [headers, ...rows]
       .map((row) => row.map(escapeCsvValue).join(","))
       .join("\n");
@@ -591,14 +715,14 @@ export default function AccountingPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-7 px-5 py-8 sm:px-6 lg:py-10">
         <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
           <div>
             <p className="page-eyebrow">Yorum Kart</p>
             <h1 className="page-title mt-5">Muhasebe</h1>
             <p className="muted-text mt-4 max-w-3xl text-base font-medium leading-7">
-              Yorum Kart abonelik paketlerini, aylık gelirleri, giderleri ve
-              ortak paylarını takip edin.
+              Bu ay tahsil edilecek abonelikleri, alınan ödemeleri ve ortak
+              paylarını sade bir panelde takip edin.
             </p>
           </div>
           <button type="button" onClick={handleOpenModal} className="btn-primary w-fit">
@@ -608,35 +732,92 @@ export default function AccountingPage() {
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
-            label="Toplam Gelir"
-            value={formatCurrency(totals.totalRevenue)}
+            label="Bu Ay Beklenen"
+            value={formatCurrency(totals.expectedThisMonth)}
             color="#FBBF24"
           />
           <SummaryCard
-            label="Toplam Gider"
-            value={formatCurrency(totals.totalExpense)}
-            color="#F472B6"
-          />
-          <SummaryCard
-            label="Dağıtılabilir Net"
-            value={formatCurrency(totals.distributableNet)}
+            label="Bu Ay Alınan"
+            value={formatCurrency(totals.receivedThisMonth)}
             color="#34D399"
           />
           <SummaryCard
-            label="Aylık Tekrarlayan Gelir"
-            value={formatCurrency(totals.monthlyRecurringRevenue)}
+            label="Bu Ay Kalan"
+            value={formatCurrency(totals.remainingThisMonth)}
             color="#8B5CF6"
+          />
+          <SummaryCard
+            label="Bu Ay Gider"
+            value={formatCurrency(totals.expenseThisMonth)}
+            color="#F472B6"
           />
         </section>
 
         <section className="card-pop overflow-hidden">
-          <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4">
+            <h2 className="font-heading text-2xl font-black text-[#1E293B]">
+              Bu Ay Tahsil Edilecekler
+            </h2>
+            <p className="mt-1 text-sm font-bold text-[#1E293B]">
+              {currentMonthLabel} için aktif aboneliklerin aylık ödemeleri.
+            </p>
+          </div>
+
+          {currentMonthDues.length === 0 ? (
+            <div className="p-5">
+              <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
+                Bu ay tahsil edilecek aktif abonelik yok.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+              {currentMonthDues.map(({ record, payment }) => (
+                <article
+                  key={record.id}
+                  className="rounded-[20px] border-2 border-[#1E293B] bg-white p-4 shadow-[3px_3px_0_#1E293B]"
+                >
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <h3 className="font-heading text-lg font-black text-[#1E293B]">
+                        {record.businessName}
+                      </h3>
+                      <p className="mt-1 text-xs font-black text-slate-500">
+                        {record.packageName} • {currentMonthLabel}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-heading text-2xl font-black text-[#1E293B]">
+                          {formatCurrency(record.monthlyFee)}
+                        </p>
+                        <p className="text-xs font-black text-slate-500">
+                          {payment.isPaid ? "Ödeme alındı" : "Bekliyor"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkCurrentMonthPaid(record.id)}
+                        disabled={payment.isPaid}
+                        className={payment.isPaid ? "btn-secondary min-h-11 px-4 text-xs" : "btn-primary min-h-11 px-4 text-xs"}
+                      >
+                        {payment.isPaid ? "Alındı ✓" : "Ödeme Alındı"}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card-pop overflow-hidden">
+          <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#EDE9FE] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-heading text-xl font-black text-[#1E293B]">
                 Abonelik Kayıtları
               </h2>
-              <p className="mt-1 text-sm font-bold text-[#1E293B]">
-                {records.length} kayıt gösteriliyor.
+              <p className="mt-1 text-sm font-bold text-slate-600">
+                Kompakt abonelik özeti • {records.length} kayıt
               </p>
             </div>
             <button
@@ -657,75 +838,48 @@ export default function AccountingPage() {
               </p>
             </div>
           ) : (
-            <div className="grid gap-4 p-4">
+            <div className="grid gap-3 p-4 md:grid-cols-2">
               {sortedRecords.map((record) => (
                 <article
                   key={record.id}
-                  className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]"
+                  className="rounded-[20px] border-2 border-[#1E293B] bg-white p-4 shadow-[3px_3px_0_#1E293B]"
                 >
-                  <div className="grid gap-4 xl:grid-cols-[1.2fr_2fr_auto] xl:items-start">
-                    <div>
-                      <h3 className="font-heading text-xl font-black text-[#1E293B]">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h3 className="font-heading text-lg font-black text-[#1E293B]">
                         {record.businessName}
                       </h3>
                       <p className="mt-1 text-sm font-bold text-slate-600">
-                        {record.category} • {record.location}
+                        {record.packageName} • {formatCurrency(record.monthlyFee)} / ay
+                      </p>
+                      <p className="mt-1 text-xs font-black text-slate-500">
+                        Başlangıç: {formatDate(record.subscriptionStartDate)}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="rounded-full border-2 border-[#1E293B] bg-[#EDE9FE] px-3 py-1 text-xs font-black text-[#1E293B]">
-                          {record.packageName}
-                        </span>
                         <span className="rounded-full border-2 border-[#1E293B] bg-[#FFFDF5] px-3 py-1 text-xs font-black text-[#1E293B]">
-                          {formatDate(record.subscriptionStartDate)}
+                          {record.subscriptionMonths} ay
+                        </span>
+                        <span className="rounded-full border-2 border-[#1E293B] bg-[#EDE9FE] px-3 py-1 text-xs font-black text-[#1E293B]">
+                          {record.status}
+                        </span>
+                        <span className="rounded-full border-2 border-[#1E293B] bg-[#D1FAE5] px-3 py-1 text-xs font-black text-[#1E293B]">
+                          {record.paidMonthCount} ay ödendi
                         </span>
                       </div>
+                      {record.note ? (
+                        <p className="mt-3 rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3 text-xs font-bold text-[#1E293B]">
+                          {record.note}
+                        </p>
+                      ) : null}
                     </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <MetricBadge
-                        label="Kurulum"
-                        value={formatCurrency(record.setupFee)}
-                      />
-                      <MetricBadge
-                        label="Aylık"
-                        value={formatCurrency(record.monthlyFee)}
-                      />
-                      <MetricBadge
-                        label="Toplam Gelir"
-                        value={formatCurrency(record.totalRevenue)}
-                      />
-                      <MetricBadge
-                        label="Toplam Gider"
-                        value={formatCurrency(record.totalExpense)}
-                      />
-                      <MetricBadge
-                        label="1. Kişi"
-                        value={formatCurrency(record.partner1Share)}
-                      />
-                      <MetricBadge
-                        label="2. Kişi"
-                        value={formatCurrency(record.partner2Share)}
-                      />
-                      <MetricBadge
-                        label="3. Kişi"
-                        value={formatCurrency(record.partner3Share)}
-                      />
-                    </div>
-
                     <button
                       type="button"
                       onClick={() => handleDeleteRecord(record.id)}
-                      className="btn-danger min-h-11 px-3 text-xs"
+                      className="btn-danger min-h-10 px-3 text-xs"
                     >
-                      Kaydı Sil
+                      Sil
                     </button>
                   </div>
-
-                  {record.note ? (
-                    <p className="mt-4 rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3 text-sm font-bold text-[#1E293B]">
-                      {record.note}
-                    </p>
-                  ) : null}
                 </article>
               ))}
             </div>
@@ -735,27 +889,27 @@ export default function AccountingPage() {
         <section className="card-pop p-5">
           <div>
             <h2 className="font-heading text-2xl font-black text-[#1E293B]">
-              Ortak Pay Dağılımı
+              Bu Ay Ortak Payı
             </h2>
             <p className="mt-2 text-sm font-bold text-slate-600">
-              Giderler 1. kişinin %70 payından düşülerek hesaplanır.
+              Giderler 1. kişinin payından düşülür.
             </p>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <ShareCard
-              label="1. Kişi Toplam Payı (%70 - giderler)"
-              value={formatCurrency(totals.totalPartner1Share)}
+              label="1. Kişi (%70 - giderler)"
+              value={formatCurrency(totals.partner1ThisMonth)}
               color="#8B5CF6"
             />
             <ShareCard
-              label="2. Kişi Toplam Payı (%20)"
-              value={formatCurrency(totals.totalPartner2Share)}
+              label="2. Kişi (%20)"
+              value={formatCurrency(totals.partner2ThisMonth)}
               color="#34D399"
             />
             <ShareCard
-              label="3. Kişi Toplam Payı (%10)"
-              value={formatCurrency(totals.totalPartner3Share)}
+              label="3. Kişi (%10)"
+              value={formatCurrency(totals.partner3ThisMonth)}
               color="#F472B6"
             />
           </div>
@@ -894,6 +1048,16 @@ function SubscriptionRecordModal({
                             className="input-pop w-full"
                           />
                         </FormField>
+                        <FormField label="Anlaşma Süresi (Ay)">
+                          <NumberInput
+                            value={formState.subscriptionMonths}
+                            onChange={(value) =>
+                              onUpdateField("subscriptionMonths", value)
+                            }
+                            min="1"
+                            step="1"
+                          />
+                        </FormField>
                         <FormField label="Kurulum ücreti">
                           <NumberInput
                             value={formState.setupFee}
@@ -922,24 +1086,6 @@ function SubscriptionRecordModal({
                             onChange={(value) =>
                               onUpdateField("nfcCardUnitCost", value)
                             }
-                          />
-                        </FormField>
-                        <FormField label="Ek hizmet geliri">
-                          <NumberInput
-                            value={formState.extraServiceRevenue}
-                            onChange={(value) =>
-                              onUpdateField("extraServiceRevenue", value)
-                            }
-                          />
-                        </FormField>
-                        <FormField label="Ek hizmet notu">
-                          <input
-                            value={formState.extraServiceNote}
-                            onChange={(event) =>
-                              onUpdateField("extraServiceNote", event.target.value)
-                            }
-                            placeholder="Örn: menü tasarımı"
-                            className="input-pop w-full"
                           />
                         </FormField>
                         <FormField label="Baskı maliyeti">
@@ -996,29 +1142,22 @@ function SubscriptionRecordModal({
                         Giderler 1. kişinin %70 payından düşülür.
                       </p>
                       <div className="mt-4 grid gap-3">
-                        <MetricBadge label="Paket" value={formState.packageName} />
                         <MetricBadge
-                          label="Kurulum ücreti"
+                          label="Kurulum"
                           value={formatCurrency(calculatedSubscription.setupFee)}
                         />
                         <MetricBadge
-                          label="Aylık abonelik"
+                          label="Aylık ücret"
                           value={formatCurrency(calculatedSubscription.monthlyFee)}
                         />
                         <MetricBadge
-                          label="Ek hizmet geliri"
-                          value={formatCurrency(
-                            calculatedSubscription.extraServiceRevenue,
-                          )}
+                          label="Süre"
+                          value={`${calculatedSubscription.subscriptionMonths} ay`}
                         />
                         <MetricBadge
-                          label="Toplam gelir"
-                          value={formatCurrency(calculatedSubscription.totalRevenue)}
-                        />
-                        <MetricBadge
-                          label="NFC toplam maliyet"
+                          label="İlk ay alınacak toplam"
                           value={formatCurrency(
-                            calculatedSubscription.nfcCardTotalCost,
+                            calculatedSubscription.firstMonthRevenue,
                           )}
                         />
                         <MetricBadge
@@ -1026,21 +1165,21 @@ function SubscriptionRecordModal({
                           value={formatCurrency(calculatedSubscription.totalExpense)}
                         />
                         <MetricBadge
-                          label="Dağıtılabilir net"
+                          label="Bu ay dağıtılabilir"
                           value={formatCurrency(
-                            calculatedSubscription.distributableNet,
+                            calculatedSubscription.distributableThisMonth,
                           )}
                         />
                         <MetricBadge
-                          label="1. kişi payı (%70 - giderler)"
+                          label="1. kişi"
                           value={formatCurrency(calculatedSubscription.partner1Share)}
                         />
                         <MetricBadge
-                          label="2. kişi payı (%20)"
+                          label="2. kişi"
                           value={formatCurrency(calculatedSubscription.partner2Share)}
                         />
                         <MetricBadge
-                          label="3. kişi payı (%10)"
+                          label="3. kişi"
                           value={formatCurrency(calculatedSubscription.partner3Share)}
                         />
                       </div>
@@ -1150,16 +1289,20 @@ function NumberInput({
   value,
   onChange,
   placeholder,
+  min = "0",
+  step = "0.01",
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  min?: string;
+  step?: string;
 }) {
   return (
     <input
       type="number"
-      min="0"
-      step="0.01"
+      min={min}
+      step={step}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}

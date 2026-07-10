@@ -36,6 +36,20 @@ export type AnalysisHistoryItem = LatestAnalysis & {
   businessCount: number;
 };
 
+export type MonthlyPayment = {
+  monthIndex: number;
+  label: string;
+  amount: number;
+  isPaid: boolean;
+  paidAt: string | null;
+};
+
+export type MonthlyLedgerPayment = {
+  amount: number;
+  isPaid: boolean;
+  paidAt: string | null;
+};
+
 export type AccountingRecord = {
   id: string;
   createdAt: string;
@@ -48,6 +62,17 @@ export type AccountingRecord = {
   packageName?: string;
   setupFee?: number;
   monthlyFee?: number;
+  subscriptionMonths?: number;
+  expectedMonthlyRevenue?: number;
+  totalSubscriptionRevenue?: number;
+  totalContractRevenue?: number;
+  paidMonthlyCount?: number;
+  remainingMonthlyCount?: number;
+  paidMonthlyRevenue?: number;
+  remainingMonthlyRevenue?: number;
+  monthlyPayments?: MonthlyPayment[];
+  paymentsByMonth?: Record<string, MonthlyLedgerPayment>;
+  status?: "active" | "completed" | "cancelled";
   saleAmount?: number;
   nfcCardQuantity?: number;
   nfcCardUnitCost?: number;

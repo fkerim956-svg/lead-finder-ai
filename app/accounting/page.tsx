@@ -9,40 +9,118 @@ import {
 } from "@/lib/storage-keys";
 import type { AccountingRecord, ReviewCardSubscriber } from "@/types/business";
 
-type SaleFormState = {
+type PackageName = "Başlangıç" | "Pro" | "Premium" | "Kurumsal";
+
+type PackagePreset = {
+  name: PackageName;
+  setupFee: number;
+  monthlyFee: number;
+  defaultNfcCardQuantity: number;
+};
+
+type SubscriptionFormState = {
   subscriberBusinessKey: string;
-  saleAmount: string;
+  packageName: PackageName;
+  setupFee: string;
+  monthlyFee: string;
   nfcCardQuantity: string;
   nfcCardUnitCost: string;
+  extraServiceRevenue: string;
+  extraServiceNote: string;
   printCost: string;
   designCost: string;
   deliveryCost: string;
   setupCost: string;
   otherCost: string;
-  saleDate: string;
+  subscriptionStartDate: string;
+  note: string;
+};
+
+type NormalizedAccountingRecord = {
+  id: string;
+  createdAt: string;
+  subscriptionStartDate: string;
+  subscriberBusinessKey: string;
+  businessName: string;
+  category: string;
+  location: string;
+  packageName: string;
+  setupFee: number;
+  monthlyFee: number;
+  nfcCardQuantity: number;
+  nfcCardUnitCost: number;
+  nfcCardTotalCost: number;
+  extraServiceRevenue: number;
+  extraServiceNote: string;
+  printCost: number;
+  designCost: number;
+  deliveryCost: number;
+  setupCost: number;
+  otherCost: number;
+  totalExpense: number;
+  totalRevenue: number;
+  distributableNet: number;
+  partner1Share: number;
+  partner2Share: number;
+  partner3Share: number;
+  totalDistributed: number;
   note: string;
 };
 
 type AccountingTotals = {
   totalRevenue: number;
-  totalCost: number;
-  netProfit: number;
+  totalExpense: number;
+  distributableNet: number;
+  monthlyRecurringRevenue: number;
   totalPartner1Share: number;
   totalPartner2Share: number;
   totalPartner3Share: number;
 };
 
-const initialFormState: SaleFormState = {
+const PACKAGE_PRESETS: PackagePreset[] = [
+  {
+    name: "Başlangıç",
+    setupFee: 2500,
+    monthlyFee: 1000,
+    defaultNfcCardQuantity: 2,
+  },
+  {
+    name: "Pro",
+    setupFee: 4000,
+    monthlyFee: 2000,
+    defaultNfcCardQuantity: 5,
+  },
+  {
+    name: "Premium",
+    setupFee: 7500,
+    monthlyFee: 3500,
+    defaultNfcCardQuantity: 10,
+  },
+  {
+    name: "Kurumsal",
+    setupFee: 15000,
+    monthlyFee: 7500,
+    defaultNfcCardQuantity: 10,
+  },
+];
+
+const defaultPackage = PACKAGE_PRESETS[0];
+
+const initialFormState: SubscriptionFormState = {
   subscriberBusinessKey: "",
-  saleAmount: "",
-  nfcCardQuantity: "1",
+  packageName: defaultPackage.name,
+  setupFee: String(defaultPackage.setupFee),
+  monthlyFee: String(defaultPackage.monthlyFee),
+  nfcCardQuantity: String(defaultPackage.defaultNfcCardQuantity),
   nfcCardUnitCost: "",
+  extraServiceRevenue: "",
+  extraServiceNote: "",
   printCost: "",
   designCost: "",
   deliveryCost: "",
   setupCost: "",
   otherCost: "",
-  saleDate: new Date().toISOString().slice(0, 10),
+  subscriptionStartDate: new Date().toISOString().slice(0, 10),
   note: "",
 };
 
@@ -107,8 +185,14 @@ function parseQuantity(value: string): number {
   return Number.isFinite(parsedValue) ? parsedValue : 0;
 }
 
-function calculateSaleValues(formState: SaleFormState) {
-  const saleAmount = parseMoney(formState.saleAmount);
+function safeNumber(value: number | undefined): number {
+  return Number.isFinite(value) ? Number(value) : 0;
+}
+
+function calculateSubscriptionValues(formState: SubscriptionFormState) {
+  const setupFee = parseMoney(formState.setupFee);
+  const monthlyFee = parseMoney(formState.monthlyFee);
+  const extraServiceRevenue = parseMoney(formState.extraServiceRevenue);
   const nfcCardQuantity = parseQuantity(formState.nfcCardQuantity);
   const nfcCardUnitCost = parseMoney(formState.nfcCardUnitCost);
   const nfcCardTotalCost = nfcCardQuantity * nfcCardUnitCost;
@@ -117,17 +201,23 @@ function calculateSaleValues(formState: SaleFormState) {
   const deliveryCost = parseMoney(formState.deliveryCost);
   const setupCost = parseMoney(formState.setupCost);
   const otherCost = parseMoney(formState.otherCost);
-  const totalCost =
+  const totalRevenue = setupFee + monthlyFee + extraServiceRevenue;
+  const totalExpense =
     nfcCardTotalCost +
     printCost +
     designCost +
     deliveryCost +
     setupCost +
     otherCost;
-  const netProfit = saleAmount - totalCost;
+  const partner1Share = totalRevenue * 0.7 - totalExpense;
+  const partner2Share = totalRevenue * 0.2;
+  const partner3Share = totalRevenue * 0.1;
+  const totalDistributed = partner1Share + partner2Share + partner3Share;
 
   return {
-    saleAmount,
+    setupFee,
+    monthlyFee,
+    extraServiceRevenue,
     nfcCardQuantity,
     nfcCardUnitCost,
     nfcCardTotalCost,
@@ -136,11 +226,96 @@ function calculateSaleValues(formState: SaleFormState) {
     deliveryCost,
     setupCost,
     otherCost,
-    totalCost,
-    netProfit,
-    partner1Share: netProfit * 0.5,
-    partner2Share: netProfit * 0.4,
-    partner3Share: netProfit * 0.1,
+    totalRevenue,
+    totalExpense,
+    distributableNet: totalRevenue - totalExpense,
+    partner1Share,
+    partner2Share,
+    partner3Share,
+    totalDistributed,
+  };
+}
+
+function normalizeAccountingRecord(
+  record: AccountingRecord,
+): NormalizedAccountingRecord {
+  const hasSubscriptionFields =
+    record.setupFee !== undefined ||
+    record.monthlyFee !== undefined ||
+    record.totalRevenue !== undefined;
+  const legacySaleAmount = safeNumber(record.saleAmount);
+  const setupFee = hasSubscriptionFields
+    ? safeNumber(record.setupFee)
+    : legacySaleAmount;
+  const monthlyFee = safeNumber(record.monthlyFee);
+  const extraServiceRevenue = safeNumber(record.extraServiceRevenue);
+  const nfcCardQuantity = safeNumber(record.nfcCardQuantity);
+  const nfcCardUnitCost = safeNumber(record.nfcCardUnitCost);
+  const calculatedNfcTotal = nfcCardQuantity * nfcCardUnitCost;
+  const nfcCardTotalCost =
+    record.nfcCardTotalCost !== undefined
+      ? safeNumber(record.nfcCardTotalCost)
+      : calculatedNfcTotal;
+  const printCost = safeNumber(record.printCost);
+  const designCost = safeNumber(record.designCost);
+  const deliveryCost = safeNumber(record.deliveryCost);
+  const setupCost = safeNumber(record.setupCost);
+  const otherCost = safeNumber(record.otherCost);
+  const calculatedExpense =
+    nfcCardTotalCost +
+    printCost +
+    designCost +
+    deliveryCost +
+    setupCost +
+    otherCost;
+  const totalExpense =
+    calculatedExpense > 0 ? calculatedExpense : safeNumber(record.totalCost);
+  const totalRevenue =
+    hasSubscriptionFields || legacySaleAmount === 0
+      ? setupFee + monthlyFee + extraServiceRevenue
+      : legacySaleAmount;
+  const partner1Share = totalRevenue * 0.7 - totalExpense;
+  const partner2Share = totalRevenue * 0.2;
+  const partner3Share = totalRevenue * 0.1;
+  const totalDistributed = partner1Share + partner2Share + partner3Share;
+
+  return {
+    id: record.id,
+    createdAt: record.createdAt,
+    subscriptionStartDate:
+      record.subscriptionStartDate ||
+      record.saleDate ||
+      record.createdAt.slice(0, 10),
+    subscriberBusinessKey:
+      record.subscriberBusinessKey ||
+      getBusinessKey({
+        businessName: record.businessName,
+        location: record.location,
+      }),
+    businessName: record.businessName,
+    category: record.category,
+    location: record.location,
+    packageName: record.packageName || "Eski Kayıt",
+    setupFee,
+    monthlyFee,
+    nfcCardQuantity,
+    nfcCardUnitCost,
+    nfcCardTotalCost,
+    extraServiceRevenue,
+    extraServiceNote: record.extraServiceNote || "",
+    printCost,
+    designCost,
+    deliveryCost,
+    setupCost,
+    otherCost,
+    totalExpense,
+    totalRevenue,
+    distributableNet: totalRevenue - totalExpense,
+    partner1Share,
+    partner2Share,
+    partner3Share,
+    totalDistributed,
+    note: record.note || "",
   };
 }
 
@@ -176,45 +351,48 @@ export default function AccountingPage() {
   const [records, setRecords] = useState<AccountingRecord[]>(getInitialRecords);
   const [subscribers] = useState<ReviewCardSubscriber[]>(getInitialSubscribers);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formState, setFormState] = useState<SaleFormState>(initialFormState);
+  const [formState, setFormState] =
+    useState<SubscriptionFormState>(initialFormState);
   const [formError, setFormError] = useState("");
 
-  const soldSubscriberKeys = useMemo(() => {
+  const normalizedRecords = useMemo(
+    () => records.map(normalizeAccountingRecord),
+    [records],
+  );
+
+  const subscribedBusinessKeys = useMemo(() => {
     return new Set(
-      records.map(
-        (record) =>
-          record.subscriberBusinessKey ||
-          getBusinessKey({
-            businessName: record.businessName,
-            location: record.location,
-          }),
-      ),
+      normalizedRecords.map((record) => record.subscriberBusinessKey),
     );
-  }, [records]);
+  }, [normalizedRecords]);
 
   const availableSubscribers = useMemo(() => {
     return subscribers.filter(
-      (subscriber) => !soldSubscriberKeys.has(getBusinessKey(subscriber)),
+      (subscriber) => !subscribedBusinessKeys.has(getBusinessKey(subscriber)),
     );
-  }, [soldSubscriberKeys, subscribers]);
+  }, [subscribedBusinessKeys, subscribers]);
 
   const selectedSubscriber = useMemo(() => {
     return availableSubscribers.find(
-      (subscriber) => getBusinessKey(subscriber) === formState.subscriberBusinessKey,
+      (subscriber) =>
+        getBusinessKey(subscriber) === formState.subscriberBusinessKey,
     );
   }, [availableSubscribers, formState.subscriberBusinessKey]);
 
-  const calculatedSale = useMemo(
-    () => calculateSaleValues(formState),
+  const calculatedSubscription = useMemo(
+    () => calculateSubscriptionValues(formState),
     [formState],
   );
 
   const totals = useMemo<AccountingTotals>(() => {
-    return records.reduce(
+    return normalizedRecords.reduce(
       (currentTotals, record) => ({
-        totalRevenue: currentTotals.totalRevenue + record.saleAmount,
-        totalCost: currentTotals.totalCost + record.totalCost,
-        netProfit: currentTotals.netProfit + record.netProfit,
+        totalRevenue: currentTotals.totalRevenue + record.totalRevenue,
+        totalExpense: currentTotals.totalExpense + record.totalExpense,
+        distributableNet:
+          currentTotals.distributableNet + record.distributableNet,
+        monthlyRecurringRevenue:
+          currentTotals.monthlyRecurringRevenue + record.monthlyFee,
         totalPartner1Share:
           currentTotals.totalPartner1Share + record.partner1Share,
         totalPartner2Share:
@@ -224,22 +402,23 @@ export default function AccountingPage() {
       }),
       {
         totalRevenue: 0,
-        totalCost: 0,
-        netProfit: 0,
+        totalExpense: 0,
+        distributableNet: 0,
+        monthlyRecurringRevenue: 0,
         totalPartner1Share: 0,
         totalPartner2Share: 0,
         totalPartner3Share: 0,
       },
     );
-  }, [records]);
+  }, [normalizedRecords]);
 
   const sortedRecords = useMemo(() => {
-    return [...records].sort(
+    return [...normalizedRecords].sort(
       (firstRecord, secondRecord) =>
-        new Date(secondRecord.saleDate).getTime() -
-        new Date(firstRecord.saleDate).getTime(),
+        new Date(secondRecord.subscriptionStartDate).getTime() -
+        new Date(firstRecord.subscriptionStartDate).getTime(),
     );
-  }, [records]);
+  }, [normalizedRecords]);
 
   function saveRecords(updatedRecords: AccountingRecord[]) {
     setRecords(updatedRecords);
@@ -249,7 +428,25 @@ export default function AccountingPage() {
     );
   }
 
-  function updateFormField(field: keyof SaleFormState, value: string) {
+  function updateFormField(field: keyof SubscriptionFormState, value: string) {
+    if (field === "packageName") {
+      const selectedPackage = PACKAGE_PRESETS.find(
+        (packagePreset) => packagePreset.name === value,
+      );
+
+      if (selectedPackage) {
+        setFormState((currentState) => ({
+          ...currentState,
+          packageName: selectedPackage.name,
+          setupFee: String(selectedPackage.setupFee),
+          monthlyFee: String(selectedPackage.monthlyFee),
+          nfcCardQuantity: String(selectedPackage.defaultNfcCardQuantity),
+        }));
+        setFormError("");
+        return;
+      }
+    }
+
     setFormState((currentState) => ({
       ...currentState,
       [field]: value,
@@ -269,33 +466,38 @@ export default function AccountingPage() {
       return;
     }
 
-    if (!Number.isFinite(Number(formState.saleAmount.replace(",", ".")))) {
-      setFormError("Satış tutarı geçerli bir sayı olmalı.");
+    if (!formState.subscriptionStartDate) {
+      setFormError("Lütfen abonelik başlangıç tarihini seçin.");
       return;
     }
 
     const newRecord: AccountingRecord = {
       id: createRecordId(),
       createdAt: new Date().toISOString(),
-      saleDate: formState.saleDate || new Date().toISOString().slice(0, 10),
+      subscriptionStartDate: formState.subscriptionStartDate,
       subscriberBusinessKey: getBusinessKey(selectedSubscriber),
       businessName: selectedSubscriber.businessName,
       category: selectedSubscriber.category,
       location: selectedSubscriber.location,
-      saleAmount: calculatedSale.saleAmount,
-      nfcCardQuantity: calculatedSale.nfcCardQuantity,
-      nfcCardUnitCost: calculatedSale.nfcCardUnitCost,
-      nfcCardTotalCost: calculatedSale.nfcCardTotalCost,
-      printCost: calculatedSale.printCost,
-      designCost: calculatedSale.designCost,
-      deliveryCost: calculatedSale.deliveryCost,
-      setupCost: calculatedSale.setupCost,
-      otherCost: calculatedSale.otherCost,
-      totalCost: calculatedSale.totalCost,
-      netProfit: calculatedSale.netProfit,
-      partner1Share: calculatedSale.partner1Share,
-      partner2Share: calculatedSale.partner2Share,
-      partner3Share: calculatedSale.partner3Share,
+      packageName: formState.packageName,
+      setupFee: calculatedSubscription.setupFee,
+      monthlyFee: calculatedSubscription.monthlyFee,
+      nfcCardQuantity: calculatedSubscription.nfcCardQuantity,
+      nfcCardUnitCost: calculatedSubscription.nfcCardUnitCost,
+      nfcCardTotalCost: calculatedSubscription.nfcCardTotalCost,
+      extraServiceRevenue: calculatedSubscription.extraServiceRevenue,
+      extraServiceNote: formState.extraServiceNote.trim(),
+      printCost: calculatedSubscription.printCost,
+      designCost: calculatedSubscription.designCost,
+      deliveryCost: calculatedSubscription.deliveryCost,
+      setupCost: calculatedSubscription.setupCost,
+      otherCost: calculatedSubscription.otherCost,
+      totalExpense: calculatedSubscription.totalExpense,
+      totalRevenue: calculatedSubscription.totalRevenue,
+      partner1Share: calculatedSubscription.partner1Share,
+      partner2Share: calculatedSubscription.partner2Share,
+      partner3Share: calculatedSubscription.partner3Share,
+      totalDistributed: calculatedSubscription.totalDistributed,
       note: formState.note.trim(),
     };
 
@@ -326,8 +528,11 @@ export default function AccountingPage() {
     const headers = [
       "İşletme",
       "Konum",
-      "Satış Tarihi",
-      "Satış Tutarı",
+      "Abonelik Başlangıcı",
+      "Paket",
+      "Kurulum Ücreti",
+      "Aylık Ücret",
+      "Ek Hizmet Geliri",
       "NFC Kart Adedi",
       "NFC Birim Maliyeti",
       "NFC Toplam Maliyet",
@@ -336,8 +541,9 @@ export default function AccountingPage() {
       "Teslimat/Yol Maliyeti",
       "Kurulum Maliyeti",
       "Diğer Gider",
+      "Toplam Gelir",
       "Toplam Gider",
-      "Net Kâr",
+      "Dağıtılabilir Net",
       "1. Kişi Payı",
       "2. Kişi Payı",
       "3. Kişi Payı",
@@ -346,8 +552,11 @@ export default function AccountingPage() {
     const rows = sortedRecords.map((record) => [
       record.businessName,
       record.location,
-      record.saleDate,
-      record.saleAmount,
+      record.subscriptionStartDate,
+      record.packageName,
+      record.setupFee,
+      record.monthlyFee,
+      record.extraServiceRevenue,
       record.nfcCardQuantity,
       record.nfcCardUnitCost,
       record.nfcCardTotalCost,
@@ -356,8 +565,9 @@ export default function AccountingPage() {
       record.deliveryCost,
       record.setupCost,
       record.otherCost,
-      record.totalCost,
-      record.netProfit,
+      record.totalRevenue,
+      record.totalExpense,
+      record.distributableNet,
       record.partner1Share,
       record.partner2Share,
       record.partner3Share,
@@ -387,30 +597,35 @@ export default function AccountingPage() {
             <p className="page-eyebrow">Yorum Kart</p>
             <h1 className="page-title mt-5">Muhasebe</h1>
             <p className="muted-text mt-4 max-w-3xl text-base font-medium leading-7">
-              Yorum Kart satış gelirlerini, maliyetleri ve ortak paylarını
-              takip edin.
+              Yorum Kart abonelik paketlerini, aylık gelirleri, giderleri ve
+              ortak paylarını takip edin.
             </p>
           </div>
           <button type="button" onClick={handleOpenModal} className="btn-primary w-fit">
-            Satış Kaydı Ekle
+            Abonelik Kaydı Ekle
           </button>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
-            label="Toplam Ciro"
+            label="Toplam Gelir"
             value={formatCurrency(totals.totalRevenue)}
             color="#FBBF24"
           />
           <SummaryCard
             label="Toplam Gider"
-            value={formatCurrency(totals.totalCost)}
+            value={formatCurrency(totals.totalExpense)}
             color="#F472B6"
           />
           <SummaryCard
-            label="Net Kâr"
-            value={formatCurrency(totals.netProfit)}
+            label="Dağıtılabilir Net"
+            value={formatCurrency(totals.distributableNet)}
             color="#34D399"
+          />
+          <SummaryCard
+            label="Aylık Tekrarlayan Gelir"
+            value={formatCurrency(totals.monthlyRecurringRevenue)}
+            color="#8B5CF6"
           />
         </section>
 
@@ -418,7 +633,7 @@ export default function AccountingPage() {
           <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-heading text-xl font-black text-[#1E293B]">
-                Satış Kayıtları
+                Abonelik Kayıtları
               </h2>
               <p className="mt-1 text-sm font-bold text-[#1E293B]">
                 {records.length} kayıt gösteriliyor.
@@ -437,8 +652,8 @@ export default function AccountingPage() {
           {records.length === 0 ? (
             <div className="p-5">
               <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
-                Henüz satış kaydı yok. İlk kaydı eklemek için “Satış Kaydı
-                Ekle” butonunu kullan.
+                Henüz abonelik kaydı yok. İlk kaydı eklemek için “Abonelik
+                Kaydı Ekle” butonunu kullan.
               </p>
             </div>
           ) : (
@@ -448,7 +663,7 @@ export default function AccountingPage() {
                   key={record.id}
                   className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]"
                 >
-                  <div className="grid gap-4 lg:grid-cols-[1.4fr_2fr_auto] lg:items-start">
+                  <div className="grid gap-4 xl:grid-cols-[1.2fr_2fr_auto] xl:items-start">
                     <div>
                       <h3 className="font-heading text-xl font-black text-[#1E293B]">
                         {record.businessName}
@@ -456,23 +671,44 @@ export default function AccountingPage() {
                       <p className="mt-1 text-sm font-bold text-slate-600">
                         {record.category} • {record.location}
                       </p>
-                      <p className="mt-2 w-fit rounded-full border-2 border-[#1E293B] bg-[#EDE9FE] px-3 py-1 text-xs font-black text-[#1E293B]">
-                        {formatDate(record.saleDate)}
-                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full border-2 border-[#1E293B] bg-[#EDE9FE] px-3 py-1 text-xs font-black text-[#1E293B]">
+                          {record.packageName}
+                        </span>
+                        <span className="rounded-full border-2 border-[#1E293B] bg-[#FFFDF5] px-3 py-1 text-xs font-black text-[#1E293B]">
+                          {formatDate(record.subscriptionStartDate)}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       <MetricBadge
-                        label="Satış Tutarı"
-                        value={formatCurrency(record.saleAmount)}
+                        label="Kurulum"
+                        value={formatCurrency(record.setupFee)}
+                      />
+                      <MetricBadge
+                        label="Aylık"
+                        value={formatCurrency(record.monthlyFee)}
+                      />
+                      <MetricBadge
+                        label="Toplam Gelir"
+                        value={formatCurrency(record.totalRevenue)}
                       />
                       <MetricBadge
                         label="Toplam Gider"
-                        value={formatCurrency(record.totalCost)}
+                        value={formatCurrency(record.totalExpense)}
                       />
                       <MetricBadge
-                        label="Net Kâr"
-                        value={formatCurrency(record.netProfit)}
+                        label="1. Kişi"
+                        value={formatCurrency(record.partner1Share)}
+                      />
+                      <MetricBadge
+                        label="2. Kişi"
+                        value={formatCurrency(record.partner2Share)}
+                      />
+                      <MetricBadge
+                        label="3. Kişi"
+                        value={formatCurrency(record.partner3Share)}
                       />
                     </div>
 
@@ -502,23 +738,23 @@ export default function AccountingPage() {
               Ortak Pay Dağılımı
             </h2>
             <p className="mt-2 text-sm font-bold text-slate-600">
-              Net kâr üzerinden otomatik hesaplanır.
+              Giderler 1. kişinin %70 payından düşülerek hesaplanır.
             </p>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <ShareCard
-              label="1. Kişi Payı (%50)"
+              label="1. Kişi Toplam Payı (%70 - giderler)"
               value={formatCurrency(totals.totalPartner1Share)}
               color="#8B5CF6"
             />
             <ShareCard
-              label="2. Kişi Payı (%40)"
+              label="2. Kişi Toplam Payı (%20)"
               value={formatCurrency(totals.totalPartner2Share)}
               color="#34D399"
             />
             <ShareCard
-              label="3. Kişi Payı (%10)"
+              label="3. Kişi Toplam Payı (%10)"
               value={formatCurrency(totals.totalPartner3Share)}
               color="#F472B6"
             />
@@ -527,12 +763,12 @@ export default function AccountingPage() {
       </div>
 
       {isModalOpen ? (
-        <SaleRecordModal
+        <SubscriptionRecordModal
           subscribers={availableSubscribers}
           totalSubscriberCount={subscribers.length}
           formState={formState}
           selectedSubscriber={selectedSubscriber}
-          calculatedSale={calculatedSale}
+          calculatedSubscription={calculatedSubscription}
           formError={formError}
           onUpdateField={updateFormField}
           onSave={handleSaveRecord}
@@ -543,12 +779,12 @@ export default function AccountingPage() {
   );
 }
 
-function SaleRecordModal({
+function SubscriptionRecordModal({
   subscribers,
   totalSubscriberCount,
   formState,
   selectedSubscriber,
-  calculatedSale,
+  calculatedSubscription,
   formError,
   onUpdateField,
   onSave,
@@ -556,27 +792,27 @@ function SaleRecordModal({
 }: {
   subscribers: ReviewCardSubscriber[];
   totalSubscriberCount: number;
-  formState: SaleFormState;
+  formState: SubscriptionFormState;
   selectedSubscriber: ReviewCardSubscriber | undefined;
-  calculatedSale: ReturnType<typeof calculateSaleValues>;
+  calculatedSubscription: ReturnType<typeof calculateSubscriptionValues>;
   formError: string;
-  onUpdateField: (field: keyof SaleFormState, value: string) => void;
+  onUpdateField: (field: keyof SubscriptionFormState, value: string) => void;
   onSave: () => void;
   onClose: () => void;
 }) {
   const emptySubscriberMessage =
     totalSubscriberCount === 0
       ? "Önce Aboneler sayfasından bir işletmeyi Yorum Kart abonesi olarak ekleyin."
-      : "Tüm aboneler için satış kaydı oluşturulmuş.";
+      : "Tüm aboneler için abonelik kaydı oluşturulmuş.";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
-      <section className="hard-shadow-lg max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border-2 border-[#1E293B] bg-white">
+      <section className="hard-shadow-lg max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border-2 border-[#1E293B] bg-white">
         <div className="flex items-start justify-between gap-4 border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4">
           <div>
             <p className="page-eyebrow bg-[#34D399]">Muhasebe</p>
             <h2 className="mt-3 font-heading text-3xl font-black text-[#1E293B]">
-              Satış Kaydı Ekle
+              Yeni Abonelik Kaydı
             </h2>
           </div>
           <button type="button" onClick={onClose} className="btn-secondary min-h-10 px-4">
@@ -614,7 +850,7 @@ function SaleRecordModal({
               </FormField>
 
               {selectedSubscriber ? (
-                <div className="grid gap-4">
+                <div className="grid gap-5">
                   <div className="rounded-2xl border-2 border-[#1E293B] bg-[#EDE9FE] p-4">
                     <p className="font-heading text-lg font-black text-[#1E293B]">
                       {selectedSubscriber.businessName}
@@ -624,102 +860,190 @@ function SaleRecordModal({
                     </p>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField label="Satış tutarı">
-                      <NumberInput
-                        value={formState.saleAmount}
-                        onChange={(value) => onUpdateField("saleAmount", value)}
-                        placeholder="Örn: 2500"
-                      />
-                    </FormField>
-                    <FormField label="Satış tarihi">
-                      <input
-                        type="date"
-                        value={formState.saleDate}
-                        onChange={(event) =>
-                          onUpdateField("saleDate", event.target.value)
-                        }
-                        className="input-pop w-full"
-                      />
-                    </FormField>
-                    <FormField label="NFC kart adedi">
-                      <NumberInput
-                        value={formState.nfcCardQuantity}
-                        onChange={(value) =>
-                          onUpdateField("nfcCardQuantity", value)
-                        }
-                      />
-                    </FormField>
-                    <FormField label="1 NFC kart maliyeti">
-                      <NumberInput
-                        value={formState.nfcCardUnitCost}
-                        onChange={(value) =>
-                          onUpdateField("nfcCardUnitCost", value)
-                        }
-                      />
-                    </FormField>
-                    <FormField label="Baskı maliyeti">
-                      <NumberInput
-                        value={formState.printCost}
-                        onChange={(value) => onUpdateField("printCost", value)}
-                      />
-                    </FormField>
-                    <FormField label="Tasarım maliyeti">
-                      <NumberInput
-                        value={formState.designCost}
-                        onChange={(value) => onUpdateField("designCost", value)}
-                      />
-                    </FormField>
-                    <FormField label="Teslimat / yol maliyeti">
-                      <NumberInput
-                        value={formState.deliveryCost}
-                        onChange={(value) => onUpdateField("deliveryCost", value)}
-                      />
-                    </FormField>
-                    <FormField label="Kurulum maliyeti">
-                      <NumberInput
-                        value={formState.setupCost}
-                        onChange={(value) => onUpdateField("setupCost", value)}
-                      />
-                    </FormField>
-                    <FormField label="Diğer gider">
-                      <NumberInput
-                        value={formState.otherCost}
-                        onChange={(value) => onUpdateField("otherCost", value)}
-                      />
-                    </FormField>
-                  </div>
+                  <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                    <div className="grid gap-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField label="Paket">
+                          <select
+                            value={formState.packageName}
+                            onChange={(event) =>
+                              onUpdateField("packageName", event.target.value)
+                            }
+                            className="input-pop w-full"
+                          >
+                            {PACKAGE_PRESETS.map((packagePreset) => (
+                              <option
+                                key={packagePreset.name}
+                                value={packagePreset.name}
+                              >
+                                {packagePreset.name}
+                              </option>
+                            ))}
+                          </select>
+                        </FormField>
+                        <FormField label="Abonelik başlangıcı">
+                          <input
+                            type="date"
+                            value={formState.subscriptionStartDate}
+                            onChange={(event) =>
+                              onUpdateField(
+                                "subscriptionStartDate",
+                                event.target.value,
+                              )
+                            }
+                            className="input-pop w-full"
+                          />
+                        </FormField>
+                        <FormField label="Kurulum ücreti">
+                          <NumberInput
+                            value={formState.setupFee}
+                            onChange={(value) => onUpdateField("setupFee", value)}
+                            placeholder="Örn: 2500"
+                          />
+                        </FormField>
+                        <FormField label="Aylık abonelik ücreti">
+                          <NumberInput
+                            value={formState.monthlyFee}
+                            onChange={(value) => onUpdateField("monthlyFee", value)}
+                            placeholder="Örn: 1000"
+                          />
+                        </FormField>
+                        <FormField label="NFC kart adedi">
+                          <NumberInput
+                            value={formState.nfcCardQuantity}
+                            onChange={(value) =>
+                              onUpdateField("nfcCardQuantity", value)
+                            }
+                          />
+                        </FormField>
+                        <FormField label="1 NFC kart maliyeti">
+                          <NumberInput
+                            value={formState.nfcCardUnitCost}
+                            onChange={(value) =>
+                              onUpdateField("nfcCardUnitCost", value)
+                            }
+                          />
+                        </FormField>
+                        <FormField label="Ek hizmet geliri">
+                          <NumberInput
+                            value={formState.extraServiceRevenue}
+                            onChange={(value) =>
+                              onUpdateField("extraServiceRevenue", value)
+                            }
+                          />
+                        </FormField>
+                        <FormField label="Ek hizmet notu">
+                          <input
+                            value={formState.extraServiceNote}
+                            onChange={(event) =>
+                              onUpdateField("extraServiceNote", event.target.value)
+                            }
+                            placeholder="Örn: menü tasarımı"
+                            className="input-pop w-full"
+                          />
+                        </FormField>
+                        <FormField label="Baskı maliyeti">
+                          <NumberInput
+                            value={formState.printCost}
+                            onChange={(value) => onUpdateField("printCost", value)}
+                          />
+                        </FormField>
+                        <FormField label="Tasarım maliyeti">
+                          <NumberInput
+                            value={formState.designCost}
+                            onChange={(value) => onUpdateField("designCost", value)}
+                          />
+                        </FormField>
+                        <FormField label="Teslimat / yol maliyeti">
+                          <NumberInput
+                            value={formState.deliveryCost}
+                            onChange={(value) =>
+                              onUpdateField("deliveryCost", value)
+                            }
+                          />
+                        </FormField>
+                        <FormField label="Kurulum maliyeti">
+                          <NumberInput
+                            value={formState.setupCost}
+                            onChange={(value) => onUpdateField("setupCost", value)}
+                          />
+                        </FormField>
+                        <FormField label="Diğer gider">
+                          <NumberInput
+                            value={formState.otherCost}
+                            onChange={(value) => onUpdateField("otherCost", value)}
+                          />
+                        </FormField>
+                      </div>
 
-                  <FormField label="Not">
-                    <textarea
-                      value={formState.note}
-                      onChange={(event) => onUpdateField("note", event.target.value)}
-                      placeholder="Satış notu ekle"
-                      className="input-pop min-h-24 w-full"
-                    />
-                  </FormField>
+                      <FormField label="Not">
+                        <textarea
+                          value={formState.note}
+                          onChange={(event) =>
+                            onUpdateField("note", event.target.value)
+                          }
+                          placeholder="Abonelik notu ekle"
+                          className="input-pop min-h-24 w-full"
+                        />
+                      </FormField>
+                    </div>
 
-                  <div className="rounded-[24px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
-                    <h3 className="font-heading text-xl font-black text-[#1E293B]">
-                      Hesap Özeti
-                    </h3>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <MetricBadge
-                        label="Satış tutarı"
-                        value={formatCurrency(calculatedSale.saleAmount)}
-                      />
-                      <MetricBadge
-                        label="NFC toplam maliyet"
-                        value={formatCurrency(calculatedSale.nfcCardTotalCost)}
-                      />
-                      <MetricBadge
-                        label="Toplam gider"
-                        value={formatCurrency(calculatedSale.totalCost)}
-                      />
-                      <MetricBadge
-                        label="Net kâr"
-                        value={formatCurrency(calculatedSale.netProfit)}
-                      />
+                    <div className="rounded-[24px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
+                      <h3 className="font-heading text-xl font-black text-[#1E293B]">
+                        Hesap Özeti
+                      </h3>
+                      <p className="mt-2 rounded-2xl border-2 border-[#1E293B] bg-[#FBBF24] p-3 text-xs font-black text-[#1E293B]">
+                        Giderler 1. kişinin %70 payından düşülür.
+                      </p>
+                      <div className="mt-4 grid gap-3">
+                        <MetricBadge label="Paket" value={formState.packageName} />
+                        <MetricBadge
+                          label="Kurulum ücreti"
+                          value={formatCurrency(calculatedSubscription.setupFee)}
+                        />
+                        <MetricBadge
+                          label="Aylık abonelik"
+                          value={formatCurrency(calculatedSubscription.monthlyFee)}
+                        />
+                        <MetricBadge
+                          label="Ek hizmet geliri"
+                          value={formatCurrency(
+                            calculatedSubscription.extraServiceRevenue,
+                          )}
+                        />
+                        <MetricBadge
+                          label="Toplam gelir"
+                          value={formatCurrency(calculatedSubscription.totalRevenue)}
+                        />
+                        <MetricBadge
+                          label="NFC toplam maliyet"
+                          value={formatCurrency(
+                            calculatedSubscription.nfcCardTotalCost,
+                          )}
+                        />
+                        <MetricBadge
+                          label="Toplam gider"
+                          value={formatCurrency(calculatedSubscription.totalExpense)}
+                        />
+                        <MetricBadge
+                          label="Dağıtılabilir net"
+                          value={formatCurrency(
+                            calculatedSubscription.distributableNet,
+                          )}
+                        />
+                        <MetricBadge
+                          label="1. kişi payı (%70 - giderler)"
+                          value={formatCurrency(calculatedSubscription.partner1Share)}
+                        />
+                        <MetricBadge
+                          label="2. kişi payı (%20)"
+                          value={formatCurrency(calculatedSubscription.partner2Share)}
+                        />
+                        <MetricBadge
+                          label="3. kişi payı (%10)"
+                          value={formatCurrency(calculatedSubscription.partner3Share)}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -741,7 +1065,7 @@ function SaleRecordModal({
             disabled={subscribers.length === 0}
             className="btn-primary"
           >
-            Satışı Kaydet
+            Aboneliği Kaydet
           </button>
           <button type="button" onClick={onClose} className="btn-secondary">
             Kapat

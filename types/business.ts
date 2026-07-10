@@ -35,3 +35,28 @@ export type AnalysisHistoryItem = LatestAnalysis & {
   id: string;
   businessCount: number;
 };
+
+export type AccountingRecord = {
+  id: string;
+  createdAt: string;
+  saleDate: string;
+  subscriberBusinessKey: string;
+  businessName: string;
+  category: string;
+  location: string;
+  saleAmount: number;
+  nfcCardQuantity: number;
+  nfcCardUnitCost: number;
+  nfcCardTotalCost: number;
+  printCost: number;
+  designCost: number;
+  deliveryCost: number;
+  setupCost: number;
+  otherCost: number;
+  totalCost: number;
+  netProfit: number;
+  partner1Share: number;
+  partner2Share: number;
+  partner3Share: number;
+  note: string;
+};

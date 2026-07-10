@@ -9,6 +9,7 @@ const navigationItems = [
   { label: "Sonuçlar", href: "/results" },
   { label: "Favoriler", href: "/favorites" },
   { label: "Aboneler", href: "/subscribers" },
+  { label: "Muhasebe", href: "/accounting" },
   { label: "Ayarlar", href: "/settings" },
 ];
 

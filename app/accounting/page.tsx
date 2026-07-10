@@ -179,11 +179,30 @@ export default function AccountingPage() {
   const [formState, setFormState] = useState<SaleFormState>(initialFormState);
   const [formError, setFormError] = useState("");
 
+  const soldSubscriberKeys = useMemo(() => {
+    return new Set(
+      records.map(
+        (record) =>
+          record.subscriberBusinessKey ||
+          getBusinessKey({
+            businessName: record.businessName,
+            location: record.location,
+          }),
+      ),
+    );
+  }, [records]);
+
+  const availableSubscribers = useMemo(() => {
+    return subscribers.filter(
+      (subscriber) => !soldSubscriberKeys.has(getBusinessKey(subscriber)),
+    );
+  }, [soldSubscriberKeys, subscribers]);
+
   const selectedSubscriber = useMemo(() => {
-    return subscribers.find(
+    return availableSubscribers.find(
       (subscriber) => getBusinessKey(subscriber) === formState.subscriberBusinessKey,
     );
-  }, [formState.subscriberBusinessKey, subscribers]);
+  }, [availableSubscribers, formState.subscriberBusinessKey]);
 
   const calculatedSale = useMemo(
     () => calculateSaleValues(formState),
@@ -509,7 +528,8 @@ export default function AccountingPage() {
 
       {isModalOpen ? (
         <SaleRecordModal
-          subscribers={subscribers}
+          subscribers={availableSubscribers}
+          totalSubscriberCount={subscribers.length}
           formState={formState}
           selectedSubscriber={selectedSubscriber}
           calculatedSale={calculatedSale}
@@ -525,6 +545,7 @@ export default function AccountingPage() {
 
 function SaleRecordModal({
   subscribers,
+  totalSubscriberCount,
   formState,
   selectedSubscriber,
   calculatedSale,
@@ -534,6 +555,7 @@ function SaleRecordModal({
   onClose,
 }: {
   subscribers: ReviewCardSubscriber[];
+  totalSubscriberCount: number;
   formState: SaleFormState;
   selectedSubscriber: ReviewCardSubscriber | undefined;
   calculatedSale: ReturnType<typeof calculateSaleValues>;
@@ -542,6 +564,11 @@ function SaleRecordModal({
   onSave: () => void;
   onClose: () => void;
 }) {
+  const emptySubscriberMessage =
+    totalSubscriberCount === 0
+      ? "Önce Aboneler sayfasından bir işletmeyi Yorum Kart abonesi olarak ekleyin."
+      : "Tüm aboneler için satış kaydı oluşturulmuş.";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
       <section className="hard-shadow-lg max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border-2 border-[#1E293B] bg-white">
@@ -560,8 +587,7 @@ function SaleRecordModal({
         <div className="grid gap-5 p-5">
           {subscribers.length === 0 ? (
             <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
-              Önce Aboneler sayfasından bir işletmeyi Yorum Kart abonesi
-              olarak ekleyin.
+              {emptySubscriberMessage}
             </p>
           ) : (
             <>

@@ -15,13 +15,14 @@ import {
 } from "@/lib/review-card-score";
 import {
   FAVORITES_STORAGE_KEY,
+  REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY,
   SELECTED_INTENT_STORAGE_KEY,
 } from "@/lib/storage-keys";
 import {
   calculateWebDesignScore,
   getWebDesignFitLabel,
 } from "@/lib/web-design-score";
-import type { BusinessResult } from "@/types/business";
+import type { BusinessResult, ReviewCardSubscriber } from "@/types/business";
 
 type FavoriteBusiness = BusinessResult & {
   note?: string;
@@ -63,6 +64,27 @@ function getFavorites(): FavoriteBusiness[] {
     return JSON.parse(savedFavorites) as FavoriteBusiness[];
   } catch {
     window.localStorage.removeItem(FAVORITES_STORAGE_KEY);
+    return [];
+  }
+}
+
+function getReviewCardSubscribers(): ReviewCardSubscriber[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const savedSubscribers = window.localStorage.getItem(
+    REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY,
+  );
+
+  if (!savedSubscribers) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(savedSubscribers) as ReviewCardSubscriber[];
+  } catch {
+    window.localStorage.removeItem(REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY);
     return [];
   }
 }
@@ -132,8 +154,17 @@ export default function FavoritesPage() {
   const [selectedPresentationBusiness, setSelectedPresentationBusiness] =
     useState<FavoriteBusiness | null>(null);
   const [presentationSlideIndex, setPresentationSlideIndex] = useState(0);
+  const [reviewCardSubscribers, setReviewCardSubscribers] = useState<
+    ReviewCardSubscriber[]
+  >(getReviewCardSubscribers);
   const [copied, setCopied] = useState(false);
   const isReviewCardMode = selectedIntent === "review-card";
+
+  const reviewCardSubscriberKeys = useMemo(() => {
+    return new Set(
+      reviewCardSubscribers.map((subscriber) => getBusinessKey(subscriber)),
+    );
+  }, [reviewCardSubscribers]);
 
   const sortedFavorites = useMemo(() => {
     return [...favorites].sort((firstBusiness, secondBusiness) => {
@@ -148,6 +179,35 @@ export default function FavoritesPage() {
   function saveFavorites(updatedFavorites: FavoriteBusiness[]) {
     setFavorites(updatedFavorites);
     window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updatedFavorites));
+  }
+
+  function saveReviewCardSubscribers(
+    updatedSubscribers: ReviewCardSubscriber[],
+  ) {
+    setReviewCardSubscribers(updatedSubscribers);
+    window.localStorage.setItem(
+      REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY,
+      JSON.stringify(updatedSubscribers),
+    );
+  }
+
+  function isReviewCardSubscriber(business: FavoriteBusiness) {
+    return reviewCardSubscriberKeys.has(getBusinessKey(business));
+  }
+
+  function handleMarkAsSubscriber(business: FavoriteBusiness) {
+    if (isReviewCardSubscriber(business)) {
+      return;
+    }
+
+    saveReviewCardSubscribers([
+      ...reviewCardSubscribers,
+      {
+        ...business,
+        subscribedAt: new Date().toISOString(),
+        status: "Aktif Abone",
+      },
+    ]);
   }
 
   function handleRemoveFavorite(business: FavoriteBusiness) {
@@ -339,8 +399,10 @@ export default function FavoritesPage() {
                           <FavoriteActions
                             business={business}
                             isReviewCardMode={isReviewCardMode}
+                            isSubscriber={isReviewCardSubscriber(business)}
                             onOpenMessage={handleOpenMessagePanel}
                             onOpenPresentation={handleOpenPresentation}
+                            onMarkSubscriber={handleMarkAsSubscriber}
                             onRemoveFavorite={handleRemoveFavorite}
                           />
                         </td>
@@ -459,8 +521,10 @@ export default function FavoritesPage() {
                       <FavoriteActions
                         business={business}
                         isReviewCardMode={isReviewCardMode}
+                        isSubscriber={isReviewCardSubscriber(business)}
                         onOpenMessage={handleOpenMessagePanel}
                         onOpenPresentation={handleOpenPresentation}
+                        onMarkSubscriber={handleMarkAsSubscriber}
                         onRemoveFavorite={handleRemoveFavorite}
                         stacked
                       />
@@ -876,15 +940,19 @@ function FavoriteBusinessSummary({
 function FavoriteActions({
   business,
   isReviewCardMode,
+  isSubscriber,
   onOpenMessage,
   onOpenPresentation,
+  onMarkSubscriber,
   onRemoveFavorite,
   stacked = false,
 }: {
   business: FavoriteBusiness;
   isReviewCardMode: boolean;
+  isSubscriber: boolean;
   onOpenMessage: (business: FavoriteBusiness) => void;
   onOpenPresentation: (business: FavoriteBusiness) => void;
+  onMarkSubscriber: (business: FavoriteBusiness) => void;
   onRemoveFavorite: (business: FavoriteBusiness) => void;
   stacked?: boolean;
 }) {
@@ -904,6 +972,18 @@ function FavoriteActions({
           className={`${stacked ? "w-full" : ""} btn-primary min-h-11 px-3 text-xs`}
         >
           Sahada Göster
+        </button>
+      ) : null}
+      {isReviewCardMode ? (
+        <button
+          type="button"
+          onClick={() => onMarkSubscriber(business)}
+          disabled={isSubscriber}
+          className={`${stacked ? "w-full" : ""} min-h-11 rounded-full border-2 border-[#1E293B] bg-[#34D399] px-3 text-xs font-black text-[#1E293B] shadow-[4px_4px_0_#1E293B] transition hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#1E293B] focus:outline-none focus:ring-4 focus:ring-[#34D399]/35 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_#1E293B] disabled:cursor-default disabled:opacity-80 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[4px_4px_0_#1E293B]`}
+          aria-label={isSubscriber ? "Abone listesinde" : "Abone yapıldı"}
+          title={isSubscriber ? "Abone listesinde" : "Abone yapıldı"}
+        >
+          {isSubscriber ? "Abone ✓" : "Abone Yapıldı"}
         </button>
       ) : null}
       <a

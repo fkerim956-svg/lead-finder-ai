@@ -50,11 +50,15 @@ export type MonthlyLedgerPayment = {
   paidAt: string | null;
 };
 
+export type AccountingRecordType = "subscription" | "one-time";
+
 export type AccountingRecord = {
   id: string;
   createdAt: string;
+  recordType?: AccountingRecordType;
   subscriptionStartDate?: string;
   saleDate?: string;
+  oneTimeSaleDate?: string;
   subscriberBusinessKey: string;
   businessName: string;
   category: string;
@@ -74,6 +78,7 @@ export type AccountingRecord = {
   paymentsByMonth?: Record<string, MonthlyLedgerPayment>;
   status?: "active" | "completed" | "cancelled";
   saleAmount?: number;
+  oneTimeSaleAmount?: number;
   nfcCardQuantity?: number;
   nfcCardUnitCost?: number;
   nfcCardTotalCost?: number;
@@ -87,6 +92,8 @@ export type AccountingRecord = {
   totalExpense?: number;
   totalCost?: number;
   totalRevenue?: number;
+  grossProfit?: number;
+  profitMargin?: number;
   netProfit?: number;
   partner1Share?: number;
   partner2Share?: number;

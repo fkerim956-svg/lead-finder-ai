@@ -620,13 +620,15 @@ export default function AccountingPage() {
     saveRecords(records.filter((record) => record.id !== recordId));
   }
 
-  function handleMarkCurrentMonthPaid(recordId: string) {
+  function handleToggleCurrentMonthPayment(recordId: string) {
     const updatedRecords = records.map((record) => {
       if (record.id !== recordId) {
         return record;
       }
 
       const normalizedRecord = normalizeAccountingRecord(record);
+      const currentPayment = normalizedRecord.paymentsByMonth[currentMonthKey];
+      const nextIsPaid = !currentPayment?.isPaid;
 
       return {
         ...record,
@@ -634,10 +636,8 @@ export default function AccountingPage() {
           ...normalizedRecord.paymentsByMonth,
           [currentMonthKey]: {
             amount: normalizedRecord.monthlyFee,
-            isPaid: true,
-            paidAt:
-              normalizedRecord.paymentsByMonth[currentMonthKey]?.paidAt ||
-              new Date().toISOString(),
+            isPaid: nextIsPaid,
+            paidAt: nextIsPaid ? new Date().toISOString() : null,
           },
         },
       };
@@ -796,11 +796,10 @@ export default function AccountingPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleMarkCurrentMonthPaid(record.id)}
-                        disabled={payment.isPaid}
+                        onClick={() => handleToggleCurrentMonthPayment(record.id)}
                         className={payment.isPaid ? "btn-secondary min-h-11 px-4 text-xs" : "btn-primary min-h-11 px-4 text-xs"}
                       >
-                        {payment.isPaid ? "Alındı ✓" : "Ödeme Alındı"}
+                        {payment.isPaid ? "Geri Al" : "Ödeme Alındı"}
                       </button>
                     </div>
                   </div>

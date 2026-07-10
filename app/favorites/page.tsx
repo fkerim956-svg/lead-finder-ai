@@ -895,7 +895,7 @@ function FavoriteActions({
         onClick={() => onOpenMessage(business)}
         className={`${stacked ? "w-full" : ""} btn-secondary min-h-11 px-3 text-xs`}
       >
-        Mesaj Olu?tur
+        Mesaj Oluştur
       </button>
       {isReviewCardMode ? (
         <button
@@ -903,7 +903,7 @@ function FavoriteActions({
           onClick={() => onOpenPresentation(business)}
           className={`${stacked ? "w-full" : ""} btn-primary min-h-11 px-3 text-xs`}
         >
-          Sahada G?ster
+          Sahada Göster
         </button>
       ) : null}
       <a
@@ -919,7 +919,7 @@ function FavoriteActions({
         onClick={() => onRemoveFavorite(business)}
         className={`${stacked ? "w-full" : ""} btn-danger min-h-11 px-3 text-xs`}
       >
-        Favoriden ??kar
+        Favoriden Çıkar
       </button>
     </div>
   );

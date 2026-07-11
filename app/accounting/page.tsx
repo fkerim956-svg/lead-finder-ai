@@ -19,7 +19,7 @@ import type {
   ReviewCardSubscriber,
 } from "@/types/business";
 
-type PackageName = "Başlangıç" | "Pro" | "Premium" | "Kurumsal";
+type PackageName = "Başlangıç" | "Pro" | "Premium" | "Kurumsal" | "Özel";
 
 type PackagePreset = {
   name: PackageName;
@@ -48,6 +48,8 @@ type SubscriptionFormState = CostFormState & {
   monthlyFee: string;
   subscriptionMonths: string;
   subscriptionStartDate: string;
+  extraServiceRevenue: string;
+  status: SubscriptionStatus;
 };
 
 type OneTimeFormState = CostFormState & {
@@ -146,6 +148,14 @@ const PACKAGE_PRESETS: PackagePreset[] = [
   },
 ];
 
+const PACKAGE_OPTIONS: PackageName[] = [
+  "Başlangıç",
+  "Pro",
+  "Premium",
+  "Kurumsal",
+  "Özel",
+];
+
 const defaultPackage = PACKAGE_PRESETS[0];
 
 const initialSubscriptionFormState: SubscriptionFormState = {
@@ -162,6 +172,8 @@ const initialSubscriptionFormState: SubscriptionFormState = {
   setupCost: "",
   otherCost: "",
   subscriptionStartDate: new Date().toISOString().slice(0, 10),
+  extraServiceRevenue: "",
+  status: "active",
   note: "",
 };
 
@@ -442,13 +454,15 @@ function calculateCosts(formState: CostFormState) {
 function calculateSubscriptionValues(formState: SubscriptionFormState) {
   const setupFee = parseMoney(formState.setupFee);
   const monthlyFee = parseMoney(formState.monthlyFee);
+  const extraServiceRevenue = parseMoney(formState.extraServiceRevenue);
   const subscriptionMonths = parseMonthCount(formState.subscriptionMonths);
   const costs = calculateCosts(formState);
-  const firstMonthRevenue = setupFee + monthlyFee;
+  const firstMonthRevenue = setupFee + monthlyFee + extraServiceRevenue;
 
   return {
     setupFee,
     monthlyFee,
+    extraServiceRevenue,
     subscriptionMonths,
     ...costs,
     firstMonthRevenue,
@@ -572,6 +586,31 @@ function normalizeAccountingRecord(
   };
 }
 
+function createSubscriptionEditFormState(
+  record: NormalizedAccountingRecord,
+): SubscriptionFormState {
+  return {
+    subscriberBusinessKey: record.subscriberBusinessKey,
+    packageName: PACKAGE_OPTIONS.includes(record.packageName as PackageName)
+      ? (record.packageName as PackageName)
+      : "Özel",
+    setupFee: String(record.setupFee),
+    monthlyFee: String(record.monthlyFee),
+    subscriptionMonths: String(record.subscriptionMonths),
+    nfcCardQuantity: String(record.nfcCardQuantity),
+    nfcCardUnitCost: String(record.nfcCardUnitCost),
+    printCost: String(record.printCost),
+    designCost: String(record.designCost),
+    deliveryCost: String(record.deliveryCost),
+    setupCost: String(record.setupCost),
+    otherCost: String(record.otherCost),
+    subscriptionStartDate: record.subscriptionStartDate,
+    extraServiceRevenue: String(record.extraServiceRevenue),
+    status: record.status,
+    note: record.note,
+  };
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
@@ -614,6 +653,18 @@ function getStatusLabel(status: SubscriptionStatus): string {
   }
 
   return "Aktif";
+}
+
+function getStatusColor(status: SubscriptionStatus): string {
+  if (status === "cancelled") {
+    return "#FCA5A5";
+  }
+
+  if (status === "completed") {
+    return "#DBEAFE";
+  }
+
+  return "#34D399";
 }
 
 function createAccountingInsights(
@@ -718,7 +769,11 @@ export default function AccountingPage() {
   const [isStockAdjustModalOpen, setIsStockAdjustModalOpen] = useState(false);
   const [selectedDetailRecord, setSelectedDetailRecord] =
     useState<NormalizedAccountingRecord | null>(null);
+  const [selectedEditRecord, setSelectedEditRecord] =
+    useState<NormalizedAccountingRecord | null>(null);
   const [subscriptionFormState, setSubscriptionFormState] =
+    useState<SubscriptionFormState>(initialSubscriptionFormState);
+  const [editSubscriptionFormState, setEditSubscriptionFormState] =
     useState<SubscriptionFormState>(initialSubscriptionFormState);
   const [oneTimeFormState, setOneTimeFormState] =
     useState<OneTimeFormState>(initialOneTimeFormState);
@@ -727,6 +782,7 @@ export default function AccountingPage() {
   const [stockAdjustFormState, setStockAdjustFormState] =
     useState<StockAdjustFormState>(initialStockAdjustFormState);
   const [subscriptionFormError, setSubscriptionFormError] = useState("");
+  const [editSubscriptionFormError, setEditSubscriptionFormError] = useState("");
   const [oneTimeFormError, setOneTimeFormError] = useState("");
   const [stockFormError, setStockFormError] = useState("");
   const currentMonthKey = getCurrentMonthKey();
@@ -798,6 +854,11 @@ export default function AccountingPage() {
   const calculatedSubscription = useMemo(
     () => calculateSubscriptionValues(subscriptionFormState),
     [subscriptionFormState],
+  );
+
+  const calculatedEditSubscription = useMemo(
+    () => calculateSubscriptionValues(editSubscriptionFormState),
+    [editSubscriptionFormState],
   );
 
   const calculatedOneTime = useMemo(
@@ -974,6 +1035,17 @@ export default function AccountingPage() {
     setSubscriptionFormError("");
   }
 
+  function updateEditSubscriptionFormField(
+    field: keyof SubscriptionFormState,
+    value: string,
+  ) {
+    setEditSubscriptionFormState((currentState) => ({
+      ...currentState,
+      [field]: value,
+    }));
+    setEditSubscriptionFormError("");
+  }
+
   function updateOneTimeFormField(field: keyof OneTimeFormState, value: string) {
     setOneTimeFormState((currentState) => ({
       ...currentState,
@@ -1020,6 +1092,31 @@ export default function AccountingPage() {
     setIsStockAdjustModalOpen(true);
   }
 
+  function handleOpenEditSubscriptionModal(record: NormalizedAccountingRecord) {
+    setSelectedEditRecord(record);
+    setEditSubscriptionFormState(createSubscriptionEditFormState(record));
+    setEditSubscriptionFormError("");
+  }
+
+  function handleApplyEditPackagePreset() {
+    const selectedPackage = PACKAGE_PRESETS.find(
+      (packagePreset) =>
+        packagePreset.name === editSubscriptionFormState.packageName,
+    );
+
+    if (!selectedPackage) {
+      return;
+    }
+
+    setEditSubscriptionFormState((currentState) => ({
+      ...currentState,
+      setupFee: String(selectedPackage.setupFee),
+      monthlyFee: String(selectedPackage.monthlyFee),
+      nfcCardQuantity: String(selectedPackage.defaultNfcCardQuantity),
+    }));
+    setEditSubscriptionFormError("");
+  }
+
   function handleSaveSubscriptionRecord() {
     if (!selectedSubscriber) {
       setSubscriptionFormError("Lütfen önce bir abone işletme seçin.");
@@ -1063,10 +1160,11 @@ export default function AccountingPage() {
       deliveryCost: calculatedSubscription.deliveryCost,
       setupCost: calculatedSubscription.setupCost,
       otherCost: calculatedSubscription.otherCost,
+      extraServiceRevenue: calculatedSubscription.extraServiceRevenue,
       totalExpense: calculatedSubscription.totalExpense,
       stockDeducted: calculatedSubscription.nfcCardQuantity > 0,
       paymentsByMonth: {},
-      status: "active",
+      status: subscriptionFormState.status,
       note: subscriptionFormState.note.trim(),
     };
 
@@ -1143,8 +1241,131 @@ export default function AccountingPage() {
     setOneTimeFormState(initialOneTimeFormState);
   }
 
+  function handleSaveEditedSubscriptionRecord() {
+    if (!selectedEditRecord) {
+      return;
+    }
+
+    if (!editSubscriptionFormState.subscriptionStartDate) {
+      setEditSubscriptionFormError("Lütfen abonelik başlangıç tarihini seçin.");
+      return;
+    }
+
+    const existingRecord = records.find(
+      (record) => record.id === selectedEditRecord.id,
+    );
+
+    if (!existingRecord) {
+      setEditSubscriptionFormError("Düzenlenecek kayıt bulunamadı.");
+      return;
+    }
+
+    const oldQuantity = selectedEditRecord.nfcCardQuantity;
+    const newQuantity = calculatedEditSubscription.nfcCardQuantity;
+    const quantityDifference = newQuantity - oldQuantity;
+    let nextStock = nfcStock;
+
+    if (selectedEditRecord.stockDeducted && quantityDifference > 0) {
+      if (nfcStock.currentStock < quantityDifference) {
+        setEditSubscriptionFormError(
+          getInsufficientStockMessage(quantityDifference),
+        );
+        return;
+      }
+
+      nextStock = {
+        ...nextStock,
+        currentStock: nextStock.currentStock - quantityDifference,
+        totalUsed: nextStock.totalUsed + quantityDifference,
+        movements: [
+          createStockMovement(
+            "use",
+            quantityDifference,
+            calculatedEditSubscription.nfcCardUnitCost,
+            "Abonelik düzenlemesiyle ek kart kullanıldı",
+            selectedEditRecord.id,
+            selectedEditRecord.businessName,
+          ),
+          ...nextStock.movements,
+        ],
+      };
+    }
+
+    if (selectedEditRecord.stockDeducted && quantityDifference < 0) {
+      const returnedQuantity = Math.abs(quantityDifference);
+
+      nextStock = {
+        ...nextStock,
+        currentStock: nextStock.currentStock + returnedQuantity,
+        totalUsed: Math.max(0, nextStock.totalUsed - returnedQuantity),
+        movements: [
+          createStockMovement(
+            "return",
+            returnedQuantity,
+            calculatedEditSubscription.nfcCardUnitCost,
+            "Abonelik düzenlemesiyle kart stoğa iade edildi",
+            selectedEditRecord.id,
+            selectedEditRecord.businessName,
+          ),
+          ...nextStock.movements,
+        ],
+      };
+    }
+
+    const updatedRecord: AccountingRecord = {
+      ...existingRecord,
+      recordType: "subscription",
+      subscriptionStartDate: editSubscriptionFormState.subscriptionStartDate,
+      packageName: editSubscriptionFormState.packageName,
+      setupFee: calculatedEditSubscription.setupFee,
+      monthlyFee: calculatedEditSubscription.monthlyFee,
+      subscriptionMonths: calculatedEditSubscription.subscriptionMonths,
+      nfcCardQuantity: calculatedEditSubscription.nfcCardQuantity,
+      nfcCardUnitCost: calculatedEditSubscription.nfcCardUnitCost,
+      nfcCardTotalCost: calculatedEditSubscription.nfcCardTotalCost,
+      printCost: calculatedEditSubscription.printCost,
+      designCost: calculatedEditSubscription.designCost,
+      deliveryCost: calculatedEditSubscription.deliveryCost,
+      setupCost: calculatedEditSubscription.setupCost,
+      otherCost: calculatedEditSubscription.otherCost,
+      extraServiceRevenue: calculatedEditSubscription.extraServiceRevenue,
+      totalExpense: calculatedEditSubscription.totalExpense,
+      status: editSubscriptionFormState.status,
+      paymentsByMonth:
+        existingRecord.paymentsByMonth || selectedEditRecord.paymentsByMonth,
+      note: editSubscriptionFormState.note.trim(),
+    };
+
+    if (nextStock !== nfcStock) {
+      saveNfcStock(nextStock);
+    }
+
+    saveRecords(
+      records.map((record) =>
+        record.id === selectedEditRecord.id ? updatedRecord : record,
+      ),
+    );
+    setSelectedDetailRecord(normalizeAccountingRecord(updatedRecord));
+    setSelectedEditRecord(null);
+    setEditSubscriptionFormError("");
+  }
+
   function handleDeleteRecord(recordId: string) {
     const deletedRecord = records.find((record) => record.id === recordId);
+
+    if (!deletedRecord) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      deletedRecord.stockDeducted
+        ? "Bu kayıt silinecek ve kullanılan NFC kartlar stoğa iade edilecek. Devam edilsin mi?"
+        : "Bu kayıt silinecek. Devam edilsin mi?",
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
 
     if (selectedDetailRecord?.id === recordId) {
       setSelectedDetailRecord(null);
@@ -1275,6 +1496,7 @@ export default function AccountingPage() {
       "İşletme",
       "Konum",
       "Paket",
+      "Durum",
       "Başlangıç/Satış Tarihi",
       "Aylık Ücret",
       "Anlaşma Süresi",
@@ -1301,6 +1523,7 @@ export default function AccountingPage() {
         record.businessName,
         record.location,
         record.recordType === "subscription" ? record.packageName : "",
+        record.recordType === "subscription" ? getStatusLabel(record.status) : "-",
         record.recordType === "subscription"
           ? record.subscriptionStartDate
           : record.oneTimeSaleDate,
@@ -1512,6 +1735,7 @@ export default function AccountingPage() {
                   key={record.id}
                   record={record}
                   onOpenDetail={setSelectedDetailRecord}
+                  onOpenEdit={handleOpenEditSubscriptionModal}
                   onDelete={handleDeleteRecord}
                 />
               ))}
@@ -1631,10 +1855,28 @@ export default function AccountingPage() {
         />
       ) : null}
 
+      {selectedEditRecord ? (
+        <EditSubscriptionRecordModal
+          record={selectedEditRecord}
+          formState={editSubscriptionFormState}
+          calculatedSubscription={calculatedEditSubscription}
+          formError={editSubscriptionFormError}
+          currentStock={nfcStock.currentStock}
+          onUpdateField={updateEditSubscriptionFormField}
+          onApplyPackagePreset={handleApplyEditPackagePreset}
+          onSave={handleSaveEditedSubscriptionRecord}
+          onClose={() => {
+            setSelectedEditRecord(null);
+            setEditSubscriptionFormError("");
+          }}
+        />
+      ) : null}
+
       {selectedDetailRecord ? (
         <AccountingDetailModal
           record={selectedDetailRecord}
           currentMonthKey={currentMonthKey}
+          onOpenEdit={handleOpenEditSubscriptionModal}
           onClose={() => setSelectedDetailRecord(null)}
         />
       ) : null}
@@ -1850,6 +2092,114 @@ function StockAdjustModal({
       <ModalActions>
         <button type="button" onClick={onSave} className="btn-primary">
           Stok Düzelt
+        </button>
+        <button type="button" onClick={onClose} className="btn-secondary">
+          Kapat
+        </button>
+      </ModalActions>
+    </ModalFrame>
+  );
+}
+
+function EditSubscriptionRecordModal({
+  record,
+  formState,
+  calculatedSubscription,
+  formError,
+  currentStock,
+  onUpdateField,
+  onApplyPackagePreset,
+  onSave,
+  onClose,
+}: {
+  record: NormalizedAccountingRecord;
+  formState: SubscriptionFormState;
+  calculatedSubscription: ReturnType<typeof calculateSubscriptionValues>;
+  formError: string;
+  currentStock: number;
+  onUpdateField: (field: keyof SubscriptionFormState, value: string) => void;
+  onApplyPackagePreset: () => void;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <ModalFrame title="Abonelik Düzenle" eyebrow="Muhasebe" onClose={onClose}>
+      <div className="grid gap-5 p-5">
+        <div className="rounded-2xl border-2 border-[#1E293B] bg-[#EDE9FE] p-4">
+          <p className="font-heading text-lg font-black text-[#1E293B]">
+            {record.businessName}
+          </p>
+          <p className="mt-1 text-sm font-bold text-slate-600">
+            {record.location}
+          </p>
+          {!record.stockDeducted ? (
+            <p className="mt-3 rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3 text-xs font-black text-[#1E293B]">
+              Bu eski kayıt stok sistemi öncesinde oluşturuldu. NFC adet
+              değişiklikleri stok hareketi oluşturmaz.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3 rounded-[24px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4 md:grid-cols-[1fr_auto] md:items-end">
+          <p className="text-sm font-bold text-[#1E293B]">
+            Paket değiştirince özel değerler otomatik ezilmez. İstersen preset
+            değerlerini ayrı düğmeyle uygula.
+          </p>
+          <button
+            type="button"
+            onClick={onApplyPackagePreset}
+            disabled={formState.packageName === "Özel"}
+            className="btn-secondary min-h-11 px-4 text-xs"
+          >
+            Paket Değerlerini Uygula
+          </button>
+        </div>
+
+        <CostAndSubscriptionFields
+          formState={formState}
+          currentStock={
+            record.stockDeducted
+              ? currentStock + record.nfcCardQuantity
+              : currentStock
+          }
+          onUpdateField={onUpdateField}
+          showStatus
+        />
+
+        <FormField label="Not">
+          <textarea
+            value={formState.note}
+            onChange={(event) => onUpdateField("note", event.target.value)}
+            placeholder="Abonelik notu ekle"
+            className="input-pop min-h-24 w-full"
+          />
+        </FormField>
+
+        <div className="grid gap-3 md:grid-cols-4">
+          <MetricBadge
+            label="Aylık Ücret"
+            value={formatCurrency(calculatedSubscription.monthlyFee)}
+          />
+          <MetricBadge
+            label="Süre"
+            value={`${calculatedSubscription.subscriptionMonths} ay`}
+          />
+          <MetricBadge
+            label="NFC Adedi"
+            value={`${calculatedSubscription.nfcCardQuantity} adet`}
+          />
+          <MetricBadge
+            label="Toplam Gider"
+            value={formatCurrency(calculatedSubscription.totalExpense)}
+          />
+        </div>
+
+        {formError ? <ErrorMessage message={formError} /> : null}
+      </div>
+
+      <ModalActions>
+        <button type="button" onClick={onSave} className="btn-primary">
+          Değişiklikleri Kaydet
         </button>
         <button type="button" onClick={onClose} className="btn-secondary">
           Kapat
@@ -2112,10 +2462,12 @@ function CostAndSubscriptionFields({
   formState,
   currentStock,
   onUpdateField,
+  showStatus = false,
 }: {
   formState: SubscriptionFormState;
   currentStock: number;
   onUpdateField: (field: keyof SubscriptionFormState, value: string) => void;
+  showStatus?: boolean;
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -2125,13 +2477,31 @@ function CostAndSubscriptionFields({
           onChange={(event) => onUpdateField("packageName", event.target.value)}
           className="input-pop w-full"
         >
-          {PACKAGE_PRESETS.map((packagePreset) => (
-            <option key={packagePreset.name} value={packagePreset.name}>
-              {packagePreset.name}
+          {PACKAGE_OPTIONS.map((packageName) => (
+            <option key={packageName} value={packageName}>
+              {packageName}
             </option>
           ))}
         </select>
       </FormField>
+      {showStatus ? (
+        <FormField label="Durum">
+          <select
+            value={formState.status}
+            onChange={(event) =>
+              onUpdateField(
+                "status",
+                event.target.value as SubscriptionStatus,
+              )
+            }
+            className="input-pop w-full"
+          >
+            <option value="active">Aktif</option>
+            <option value="cancelled">İptal</option>
+            <option value="completed">Tamamlandı</option>
+          </select>
+        </FormField>
+      ) : null}
       <FormField label="Abonelik başlangıcı">
         <input
           type="date"
@@ -2162,6 +2532,13 @@ function CostAndSubscriptionFields({
           value={formState.monthlyFee}
           onChange={(value) => onUpdateField("monthlyFee", value)}
           placeholder="Örn: 1000"
+        />
+      </FormField>
+      <FormField label="Ek hizmet geliri">
+        <NumberInput
+          value={formState.extraServiceRevenue}
+          onChange={(value) => onUpdateField("extraServiceRevenue", value)}
+          placeholder="Opsiyonel"
         />
       </FormField>
       <CostFields
@@ -2244,10 +2621,12 @@ function CostFields<TField extends string>({
 function SubscriptionListItem({
   record,
   onOpenDetail,
+  onOpenEdit,
   onDelete,
 }: {
   record: NormalizedAccountingRecord;
   onOpenDetail: (record: NormalizedAccountingRecord) => void;
+  onOpenEdit: (record: NormalizedAccountingRecord) => void;
   onDelete: (recordId: string) => void;
 }) {
   return (
@@ -2261,7 +2640,10 @@ function SubscriptionListItem({
             {record.packageName} • {formatCurrency(record.monthlyFee)} / ay
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Pill label={getStatusLabel(record.status)} color="#EDE9FE" />
+            <Pill
+              label={getStatusLabel(record.status)}
+              color={getStatusColor(record.status)}
+            />
             <Pill label={`${record.paidMonthCount} ay ödendi`} color="#D1FAE5" />
             <Pill label={`${record.subscriptionMonths} ay`} color="#FFFDF5" />
           </div>
@@ -2273,6 +2655,13 @@ function SubscriptionListItem({
             className="btn-secondary min-h-10 px-3 text-xs"
           >
             Detay
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenEdit(record)}
+            className="btn-primary min-h-10 px-3 text-xs"
+          >
+            Düzenle
           </button>
           <button
             type="button"
@@ -2337,10 +2726,12 @@ function OneTimeListItem({
 function AccountingDetailModal({
   record,
   currentMonthKey,
+  onOpenEdit,
   onClose,
 }: {
   record: NormalizedAccountingRecord;
   currentMonthKey: string;
+  onOpenEdit: (record: NormalizedAccountingRecord) => void;
   onClose: () => void;
 }) {
   const currentPayment = record.paymentsByMonth[currentMonthKey];
@@ -2396,12 +2787,32 @@ function AccountingDetailModal({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <MetricBadge label="Paket" value={record.packageName} />
               <MetricBadge
+                label="Durum"
+                value={getStatusLabel(record.status)}
+              />
+              <MetricBadge
                 label="Kurulum"
                 value={formatCurrency(record.setupFee)}
               />
               <MetricBadge
                 label="Aylık Ücret"
                 value={formatCurrency(record.monthlyFee)}
+              />
+              <MetricBadge
+                label="Süre"
+                value={`${record.subscriptionMonths} ay`}
+              />
+              <MetricBadge
+                label="Başlangıç"
+                value={formatDate(record.subscriptionStartDate)}
+              />
+              <MetricBadge
+                label="NFC Adedi"
+                value={`${record.nfcCardQuantity} adet`}
+              />
+              <MetricBadge
+                label="Ödenen Ay"
+                value={`${record.paidMonthCount} ay`}
               />
               <MetricBadge
                 label="Bu Ay Ödendi mi"
@@ -2429,6 +2840,15 @@ function AccountingDetailModal({
       </div>
 
       <ModalActions>
+        {record.recordType === "subscription" ? (
+          <button
+            type="button"
+            onClick={() => onOpenEdit(record)}
+            className="btn-primary"
+          >
+            Düzenle
+          </button>
+        ) : null}
         <button type="button" onClick={onClose} className="btn-secondary">
           Kapat
         </button>

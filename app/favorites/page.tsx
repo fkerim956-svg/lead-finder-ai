@@ -161,6 +161,7 @@ export default function FavoritesPage() {
   >(getReviewCardSubscribers);
   const [searchQuery, setSearchQuery] = useState("");
   const [copied, setCopied] = useState(false);
+  const [openActionMenuKey, setOpenActionMenuKey] = useState<string | null>(null);
   const isReviewCardMode = selectedIntent === "review-card";
 
   const reviewCardSubscriberKeys = useMemo(() => {
@@ -381,11 +382,11 @@ export default function FavoritesPage() {
         </section>
 
         {favorites.length === 0 ? (
-          <section className="card-pop bg-[#F5F3FF] p-6">
-            <h2 className="font-heading text-2xl font-black text-[#1E293B]">
+          <section className="card-pop bg-white p-6">
+            <h2 className="font-heading text-xl font-semibold text-[#0F172A]">
               Henüz favori işletme yok.
             </h2>
-            <p className="mt-2 text-sm font-extrabold text-slate-600">
+            <p className="mt-2 text-sm text-[#64748B]">
               Sonuçlar sayfasından görüşmek istediğiniz işletmeleri favorilere ekleyin.
             </p>
             <a href="/results" className="btn-primary mt-5 inline-flex w-fit">
@@ -396,7 +397,7 @@ export default function FavoritesPage() {
           <section className="grid gap-4">
             <div className="card-pop p-4">
               <label className="grid gap-2">
-                <span className="text-sm font-black text-[#1E293B]">
+                <span className="text-sm font-semibold text-[#0F172A]">
                   Favorilerde ara
                 </span>
                 <input
@@ -409,17 +410,17 @@ export default function FavoritesPage() {
               </label>
             </div>
 
-            <div className="card-pop overflow-hidden">
-              <div className="border-b-2 border-[#1E293B] bg-[#F472B6] px-5 py-4">
-                <h2 className="font-heading text-xl font-black text-[#1E293B]">
+            <div className="card-pop overflow-visible">
+              <div className="border-b border-[#E2E8F0] bg-white px-5 py-4">
+                <h2 className="font-heading text-lg font-semibold text-[#0F172A]">
                   Favori İşletmeler
                 </h2>
-                <p className="mt-1 text-sm font-bold text-[#1E293B]">
+                <p className="mt-1 text-sm text-[#64748B]">
                   {sortedFavorites.length} işletme gösteriliyor.
                 </p>
               </div>
 
-              <div className="border-b-2 border-[#1E293B] bg-[#FFFDF5] p-3">
+              <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] p-3">
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                   {(isReviewCardMode
                     ? [
@@ -465,6 +466,10 @@ export default function FavoritesPage() {
                       onMarkSubscriber={handleMarkAsSubscriber}
                       onRemoveFavorite={handleRemoveFavorite}
                       onUpdateFavorite={handleUpdateFavorite}
+                      onOpenMessage={handleOpenMessagePanel}
+                      onOpenPresentation={handleOpenPresentation}
+                      openMenuKey={openActionMenuKey}
+                      onToggleMenu={setOpenActionMenuKey}
                     />
                   ))}
                 </div>
@@ -539,21 +544,15 @@ export default function FavoritesPage() {
 function SummaryCard({
   label,
   value,
-  color,
 }: {
   label: string;
   value: string | number;
   color: string;
 }) {
   return (
-    <article className="rounded-[22px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]">
-      <p
-        className="w-fit rounded-full border-2 border-[#1E293B] px-3 py-1 text-xs font-black uppercase text-[#1E293B]"
-        style={{ backgroundColor: color }}
-      >
-        {label}
-      </p>
-      <p className="mt-3 font-heading text-3xl font-black text-[#1E293B]">
+    <article className="card-pop bg-white p-4">
+      <p className="text-xs font-medium text-[#64748B]">{label}</p>
+      <p className="mt-2 font-heading text-2xl font-semibold text-[#0F172A]">
         {value}
       </p>
     </article>
@@ -568,6 +567,10 @@ function FavoriteCompactItem({
   onMarkSubscriber,
   onRemoveFavorite,
   onUpdateFavorite,
+  onOpenMessage,
+  onOpenPresentation,
+  openMenuKey,
+  onToggleMenu,
 }: {
   business: FavoriteBusiness;
   isReviewCardMode: boolean;
@@ -579,25 +582,34 @@ function FavoriteCompactItem({
     business: FavoriteBusiness,
     updates: Pick<FavoriteBusiness, "note" | "tag">,
   ) => void;
+  onOpenMessage: (business: FavoriteBusiness) => void;
+  onOpenPresentation: (business: FavoriteBusiness) => void;
+  openMenuKey: string | null;
+  onToggleMenu: (key: string | null) => void;
 }) {
+  const primaryScore = isReviewCardMode
+    ? getReviewCardScore(business)
+    : getWebDesignScore(business);
+  const primaryScoreLabel = isReviewCardMode ? "Yorum Kart" : "Web Tasarım";
+
   return (
-    <article className="grid gap-4 bg-white p-4 lg:grid-cols-[minmax(0,1.45fr)_0.45fr_0.45fr_0.6fr_0.8fr_1.45fr] lg:items-center">
+    <article className="grid gap-4 bg-white p-4 lg:grid-cols-[minmax(0,1.6fr)_0.45fr_0.45fr_0.75fr_0.8fr_1.35fr] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-heading text-lg font-black text-[#1E293B]">
+          <h3 className="font-heading text-base font-semibold text-[#0F172A]">
             {business.businessName}
           </h3>
-          <span className="badge-pop bg-[#EDE9FE]">
+          <span className="badge-pop bg-[#EFF6FF] text-[#2563EB]">
             {isReviewCardMode ? "Yorum Kart" : "Web Tasarım"}
           </span>
         </div>
-        <p className="mt-1 text-sm font-bold text-slate-600">
+        <p className="mt-1 text-sm text-[#64748B]">
           {business.category} • {business.location}
         </p>
         <div className="mt-3 flex flex-wrap gap-2 lg:hidden">
           <CompactMetric label="Puan" value={business.rating.toFixed(1)} />
           <CompactMetric label="Yorum" value={business.reviewCount} />
-          <CompactMetric label="Fırsat" value={`⭐ ${business.leadScore}/100`} />
+          <CompactMetric label={primaryScoreLabel} value={`${primaryScore}/100`} />
         </div>
       </div>
 
@@ -608,11 +620,11 @@ function FavoriteCompactItem({
         <CompactMetric label="Yorum" value={business.reviewCount} />
       </div>
       <div className="hidden lg:block">
-        <CompactMetric label="Fırsat" value={`⭐ ${business.leadScore}/100`} />
+        <CompactMetric label={primaryScoreLabel} value={`${primaryScore}/100`} />
       </div>
 
       <div>
-        <p className="mb-2 text-xs font-black uppercase text-slate-500">Durum</p>
+        <p className="mb-2 text-xs font-medium text-[#64748B]">Durum</p>
         <TagSelect
           value={business.tag ?? ""}
           onChange={(tag) => onUpdateFavorite(business, { tag })}
@@ -634,21 +646,15 @@ function FavoriteCompactItem({
             onMarkSubscriber={onMarkSubscriber}
           />
         ) : null}
-        <a
-          href={getSafeMapsUrl(business)}
-          target="_blank"
-          rel="noreferrer"
-          className="btn-ghost min-h-11 px-4 text-xs"
-        >
-          Google Maps
-        </a>
-        <button
-          type="button"
-          onClick={() => onRemoveFavorite(business)}
-          className="min-h-11 rounded-full border-2 border-[#1E293B] bg-white px-3 text-xs font-black text-[#1E293B] transition hover:bg-[#F472B6] focus:outline-none focus:ring-4 focus:ring-[#F472B6]/30"
-        >
-          Favoriden Çıkar
-        </button>
+        <FavoriteActionMenu
+          business={business}
+          isReviewCardMode={isReviewCardMode}
+          openMenuKey={openMenuKey}
+          onToggleMenu={onToggleMenu}
+          onOpenMessage={onOpenMessage}
+          onOpenPresentation={onOpenPresentation}
+          onRemoveFavorite={onRemoveFavorite}
+        />
       </div>
     </article>
   );
@@ -683,16 +689,16 @@ function FavoriteDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
-      <section className="hard-shadow-lg max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border-2 border-[#1E293B] bg-white">
-        <div className="flex items-start justify-between gap-4 border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4">
+      <section className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] bg-white px-5 py-4">
           <div>
-            <p className="page-eyebrow bg-[#FBBF24]">
+            <p className="page-eyebrow">
               {isReviewCardMode ? "Yorum Kart" : "Web Tasarım"}
             </p>
-            <h2 className="mt-3 font-heading text-3xl font-black text-[#1E293B]">
+            <h2 className="mt-3 font-heading text-2xl font-semibold text-[#0F172A]">
               {business.businessName}
             </h2>
-            <p className="mt-2 text-sm font-extrabold text-slate-600">
+            <p className="mt-2 text-sm text-[#64748B]">
               {business.category} • {business.location}
             </p>
           </div>
@@ -728,7 +734,7 @@ function FavoriteDetailModal({
 
           {isReviewCardMode ? (
             <div className="rounded-[22px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
-              <h3 className="font-heading text-xl font-black text-[#1E293B]">
+              <h3 className="font-heading text-lg font-semibold text-[#0F172A]">
                 Sektöre Göre Satış Açısı
               </h3>
               <p className="mt-2 text-sm font-bold leading-6 text-[#1E293B]">
@@ -739,14 +745,14 @@ function FavoriteDetailModal({
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-2">
-              <span className="text-sm font-black text-[#1E293B]">Durum</span>
+              <span className="text-sm font-semibold text-[#0F172A]">Durum</span>
               <TagSelect
                 value={business.tag ?? ""}
                 onChange={(tag) => onUpdateFavorite(business, { tag })}
               />
             </label>
             <label className="grid gap-2 md:col-span-2">
-              <span className="text-sm font-black text-[#1E293B]">Not</span>
+              <span className="text-sm font-semibold text-[#0F172A]">Not</span>
               <textarea
                 value={business.note ?? ""}
                 onChange={(event) =>
@@ -772,6 +778,95 @@ function FavoriteDetailModal({
           />
         </div>
       </section>
+    </div>
+  );
+}
+
+function FavoriteActionMenu({
+  business,
+  isReviewCardMode,
+  openMenuKey,
+  onToggleMenu,
+  onOpenMessage,
+  onOpenPresentation,
+  onRemoveFavorite,
+}: {
+  business: FavoriteBusiness;
+  isReviewCardMode: boolean;
+  openMenuKey: string | null;
+  onToggleMenu: (key: string | null) => void;
+  onOpenMessage: (business: FavoriteBusiness) => void;
+  onOpenPresentation: (business: FavoriteBusiness) => void;
+  onRemoveFavorite: (business: FavoriteBusiness) => void;
+}) {
+  const menuKey = getBusinessKey(business);
+  const isOpen = openMenuKey === menuKey;
+
+  function closeMenu() {
+    onToggleMenu(null);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => onToggleMenu(isOpen ? null : menuKey)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            closeMenu();
+          }
+        }}
+        aria-label="Favori işletme işlemleri"
+        aria-expanded={isOpen}
+        className="btn-ghost min-h-11 px-3 text-xs"
+      >
+        İşlemler
+      </button>
+      {isOpen ? (
+        <div className="absolute right-0 z-30 mt-2 w-56 rounded-lg border border-[#E2E8F0] bg-white p-1 shadow-lg">
+          <a
+            href={getSafeMapsUrl(business)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={closeMenu}
+            className="block rounded-md px-3 py-2 text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9]"
+          >
+            Google Maps
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              onOpenMessage(business);
+              closeMenu();
+            }}
+            className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9]"
+          >
+            Mesaj Oluştur
+          </button>
+          {isReviewCardMode ? (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenPresentation(business);
+                closeMenu();
+              }}
+              className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9]"
+            >
+              Sahada Göster
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              onRemoveFavorite(business);
+              closeMenu();
+            }}
+            className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-[#DC2626] hover:bg-[#FEF2F2]"
+          >
+            Favoriden Çıkar
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -813,7 +908,7 @@ function MessageModal({
               ? "Yorum Kart Mesajı Oluştur"
               : "Web Tasarım Mesajı"}
           </h2>
-          <p className="mt-2 text-sm font-extrabold text-slate-600">
+          <p className="mt-2 text-sm text-[#64748B]">
             {business.businessName}
           </p>
         </div>
@@ -822,7 +917,7 @@ function MessageModal({
           {isReviewCardMode ? (
             <div className="rounded-[22px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
               <label className="grid gap-2">
-                <span className="text-sm font-black text-[#1E293B]">
+                <span className="text-sm font-semibold text-[#0F172A]">
                   Mesaj tipi
                 </span>
                 <select
@@ -1064,8 +1159,10 @@ function MobileSortButton({
     <button
       type="button"
       onClick={() => onSort(column)}
-      className={`min-h-11 rounded-full border-2 border-[#1E293B] px-3 py-2 text-sm font-black shadow-[3px_3px_0_#1E293B] transition hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0_#1E293B] focus:outline-none focus:ring-4 focus:ring-[#8B5CF6]/30 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[1px_1px_0_#1E293B] ${
-        isActive ? "bg-[#8B5CF6] text-white" : "bg-white text-[#1E293B]"
+      className={`min-h-10 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+        isActive
+          ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+          : "border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F1F5F9]"
       }`}
       aria-label={`${label} sıralaması`}
       title={`${label} sıralaması`}
@@ -1085,8 +1182,8 @@ function CompactMetric({
 }) {
   return (
     <div>
-      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-black text-[#1E293B]">{value}</p>
+      <p className="text-xs font-medium text-[#64748B]">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
     </div>
   );
 }
@@ -1107,7 +1204,7 @@ function SubscriberButton({
       type="button"
       onClick={() => onMarkSubscriber(business)}
       disabled={isSubscriber}
-      className={`${wide ? "w-full" : ""} min-h-11 rounded-full border-2 border-[#1E293B] bg-[#34D399] px-4 text-xs font-black text-[#1E293B] shadow-[4px_4px_0_#1E293B] transition hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#1E293B] focus:outline-none focus:ring-4 focus:ring-[#34D399]/35 active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_#1E293B] disabled:cursor-default disabled:opacity-80 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[4px_4px_0_#1E293B]`}
+      className={`${wide ? "w-full" : ""} min-h-11 rounded-lg border border-[#16A34A] bg-[#16A34A] px-4 text-xs font-semibold text-white transition hover:bg-[#15803D] disabled:cursor-default disabled:border-[#BBF7D0] disabled:bg-[#F0FDF4] disabled:text-[#166534]`}
       aria-label={isSubscriber ? "Abone listesinde" : "Abone yapıldı"}
       title={isSubscriber ? "Abone listesinde" : "Abone yapıldı"}
     >
@@ -1215,11 +1312,11 @@ function MetricBadge({
   helper?: string;
 }) {
   return (
-    <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
-      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-black text-[#1E293B]">{value}</p>
+    <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+      <p className="text-xs font-medium text-[#64748B]">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
       {helper ? (
-        <p className="mt-1 text-xs font-extrabold text-slate-500">{helper}</p>
+        <p className="mt-1 text-xs text-[#64748B]">{helper}</p>
       ) : null}
     </div>
   );
@@ -1227,9 +1324,10 @@ function MetricBadge({
 
 function StatusBadge({ active, label }: { active: boolean; label?: string }) {
   return (
-    <span className={`badge-pop ${active ? "bg-[#34D399]" : "bg-[#FBBF24]"}`}>
+    <span className={`badge-pop ${active ? "bg-[#F0FDF4] text-[#166534]" : "bg-[#F1F5F9] text-[#475569]"}`}>
       {label ? `${label}: ` : ""}
       {active ? "Var" : "Yok"}
     </span>
   );
 }
+

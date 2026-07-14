@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -260,6 +260,7 @@ export default function ResultsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessResult | null>(null);
+  const [openActionMenuKey, setOpenActionMenuKey] = useState<string | null>(null);
   const isReviewCardMode = selectedIntent === "review-card";
 
   const pageContent = isReviewCardMode
@@ -483,7 +484,7 @@ export default function ResultsPage() {
               {pageContent.subtitle}
             </p>
             {latestAnalysis ? (
-              <p className="mt-3 w-fit rounded-full border-2 border-[#1E293B] bg-[#34D399] px-3 py-1 text-xs font-black text-[#1E293B]">
+              <p className="mt-3 w-fit rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-1 text-xs font-semibold text-[#2563EB]">
                 {[latestAnalysis.country, currentAnalysisMetaLine]
                   .filter(Boolean)
                   .join(" • ")}
@@ -495,51 +496,52 @@ export default function ResultsPage() {
           </Link>
         </header>
 
-        <section className="card-pop overflow-hidden">
-          <div className="border-b-2 border-[#1E293B] bg-[#FFFDF5] px-5 py-4">
-            <p className="text-sm font-black text-[#1E293B]">
-              Şu an açık rapor:{" "}
-              <span className="rounded-full border-2 border-[#1E293B] bg-[#FBBF24] px-3 py-1">
-                {latestAnalysis
-                  ? `${getAnalysisTitle(latestAnalysis)} - ${formatAnalysisDate(
-                      latestAnalysis.createdAt,
-                    )}`
-                  : "Henüz açık bir analiz bulunmuyor."}
-              </span>
-            </p>
-            {currentAnalysisMetaLine ? (
-              <p className="mt-3 text-sm font-bold text-slate-600">
-                {currentAnalysisMetaLine}
+        <section className="card-pop overflow-visible p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold text-[#64748B]">
+                Şu an açık rapor:
               </p>
-            ) : null}
+              <h2 className="mt-1 font-heading text-xl font-semibold text-[#0F172A]">
+                {latestAnalysis
+                  ? getAnalysisTitle(latestAnalysis)
+                  : "Henüz açık bir analiz bulunmuyor."}
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-2 text-sm text-[#64748B]">
+                {currentAnalysisMetaLine ? <span>{currentAnalysisMetaLine}</span> : null}
+                {latestAnalysis ? (
+                  <>
+                    <span>{latestAnalysis.businesses.length} işletme</span>
+                    <span>{formatAnalysisDate(latestAnalysis.createdAt)}</span>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="relative flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={handleDownloadCsv}
+                disabled={sortedBusinesses.length === 0}
+                className="btn-secondary"
+              >
+                CSV İndir
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsHistoryPanelOpen((isOpen) => !isOpen)}
+                aria-expanded={isHistoryPanelOpen}
+                className="btn-primary"
+              >
+                Rapor Değiştir
+              </button>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsHistoryPanelOpen((isOpen) => !isOpen)}
-            aria-expanded={isHistoryPanelOpen}
-            className="flex w-full flex-col gap-3 px-5 py-4 text-left transition hover:bg-[#FBBF24] sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div>
-              <h2 className="font-heading text-xl font-black text-[#1E293B]">
-                Analiz Geçmişi
-              </h2>
-              <p className="mt-1 text-sm font-bold text-slate-600">
-                Önceden oluşturduğun raporları buradan tekrar açabilirsin.
-              </p>
-              <p className="mt-2 text-xs font-black text-[#1E293B]">
-                Toplam kayıtlı analiz: {analysisHistory.length}
-              </p>
-            </div>
-            <span className="badge-pop bg-white">
-              {isHistoryPanelOpen ? "Gizle" : "Eski Analizleri Göster"}
-            </span>
-          </button>
-
           {isHistoryPanelOpen ? (
-            <div className="grid gap-4 border-t-2 border-[#1E293B] bg-[#FFFDF5] p-4 lg:grid-cols-2">
+            <div className="mt-4 grid gap-2 border-t border-[#E2E8F0] pt-4">
               {analysisHistory.length === 0 ? (
-                <p className="rounded-2xl border-2 border-[#1E293B] bg-white p-4 text-sm font-extrabold text-[#1E293B] lg:col-span-2">
+                <p className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3 text-sm font-medium text-[#64748B]">
                   Henüz kayıtlı analiz yok. Yeni analiz oluşturduğunda veya
                   manuel veri yüklediğinde burada görünecek.
                 </p>
@@ -551,28 +553,30 @@ export default function ResultsPage() {
                   return (
                     <article
                       key={analysis.id}
-                      className={`rounded-[22px] border-2 border-[#1E293B] bg-white p-4 shadow-[3px_3px_0_#1E293B] ${
-                        isCurrentAnalysis ? "outline outline-4 outline-[#34D399]/40" : ""
+                      className={`rounded-lg border p-3 ${
+                        isCurrentAnalysis
+                          ? "border-[#2563EB] bg-[#EFF6FF]"
+                          : "border-[#E2E8F0] bg-white"
                       }`}
                     >
-                      <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
                         <div>
-                          <h3 className="font-heading text-xl font-black text-[#1E293B]">
+                          <h3 className="font-heading text-base font-semibold text-[#0F172A]">
                             {getAnalysisTitle(analysis)}
                           </h3>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <span className="badge-pop bg-[#F5F3FF]">
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#64748B]">
+                            <span>
                               {formatAnalysisDate(analysis.createdAt)}
                             </span>
-                            <span className="badge-pop bg-[#34D399]">
+                            <span>
                               {getIntentLabel(analysis.selectedIntent)}
                             </span>
                             {getAnalysisMetaLine(analysis) ? (
-                              <span className="badge-pop bg-white">
+                              <span>
                                 {getAnalysisMetaLine(analysis)}
                               </span>
                             ) : null}
-                            <span className="badge-pop bg-[#EDE9FE]">
+                            <span>
                               {analysis.businesses.length} işletme
                             </span>
                           </div>
@@ -580,9 +584,9 @@ export default function ResultsPage() {
                         <button
                           type="button"
                           onClick={() => handleOpenHistoryAnalysis(analysis)}
-                          className="btn-primary"
+                          className={isCurrentAnalysis ? "btn-secondary" : "btn-primary"}
                         >
-                          {isCurrentAnalysis ? "Açık Rapor" : "Bu Raporu Aç"}
+                          {isCurrentAnalysis ? "Açık" : "Aç"}
                         </button>
                       </div>
                     </article>
@@ -615,32 +619,23 @@ export default function ResultsPage() {
           </section>
         ) : null}
 
-        <section className="card-pop overflow-hidden">
-          <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <section className="card-pop overflow-visible">
+          <div className="flex flex-col gap-1 border-b border-[#E2E8F0] bg-white px-5 py-4">
             <div>
-              <h2 className="font-heading text-xl font-black text-[#1E293B]">
+              <h2 className="font-heading text-lg font-semibold text-[#0F172A]">
                 İşletme Listesi
               </h2>
-              <p className="mt-1 text-sm font-bold text-[#1E293B]">
+              <p className="mt-1 text-sm text-[#64748B]">
                 {sortedBusinesses.length} işletme gösteriliyor.
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={handleDownloadCsv}
-              disabled={sortedBusinesses.length === 0}
-              className="btn-primary"
-            >
-              CSV İndir
-            </button>
           </div>
 
           <div className="hidden md:block">
             <table className="table-pop w-full table-fixed">
               <thead>
                 <tr>
-                  <th className="w-[28%] text-left">İşletme</th>
+                  <th className="w-[34%] text-left">İşletme</th>
                   {isReviewCardMode ? null : (
                     <th className="text-left">Web Sitesi</th>
                   )}
@@ -675,14 +670,8 @@ export default function ResultsPage() {
                       onSort={handleSort}
                     />
                   )}
-                  <SortableHeader
-                    label="Fırsat Skoru"
-                    column="leadScore"
-                    activeColumn={sortBy}
-                    direction={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <th className="w-[22%] text-left">Aksiyonlar</th>
+                  {isReviewCardMode ? <th className="text-left">Durum</th> : null}
+                  <th className="w-[18%] text-left">Aksiyonlar</th>
                 </tr>
               </thead>
               <tbody>
@@ -694,17 +683,12 @@ export default function ResultsPage() {
                     <tr key={getBusinessKey(business)}>
                       <td>
                         <div className="flex flex-col gap-1">
-                          <span className="font-extrabold">
+                          <span className="font-semibold text-[#0F172A]">
                             {business.businessName}
                           </span>
-                          <span className="text-xs font-bold text-slate-500">
+                          <span className="text-xs text-[#64748B]">
                             {business.category} • {business.location}
                           </span>
-                          {business.hasWebsite ? null : (
-                            <span className="badge-pop w-fit bg-[#FBBF24]">
-                              Web sitesi yok
-                            </span>
-                          )}
                         </div>
                       </td>
                       {isReviewCardMode ? null : (
@@ -712,7 +696,7 @@ export default function ResultsPage() {
                           <StatusBadge active={business.hasWebsite} label="Web" />
                         </td>
                       )}
-                      <td className="font-extrabold">{business.rating.toFixed(1)}</td>
+                      <td className="font-semibold">{business.rating.toFixed(1)}</td>
                       <td>{business.reviewCount}</td>
                       <td>
                         {isReviewCardMode ? (
@@ -729,11 +713,14 @@ export default function ResultsPage() {
                           />
                         )}
                       </td>
-                      <td>
-                        <span className="badge-pop bg-[#FBBF24]">
-                          ⭐ {business.leadScore}/100
-                        </span>
-                      </td>
+                      {isReviewCardMode ? (
+                        <td>
+                          <StatusBadge
+                            active={isReviewCardSubscriber(business)}
+                            label="Abone"
+                          />
+                        </td>
+                      ) : null}
                       <td>
                         <BusinessActions
                           business={business}
@@ -743,6 +730,8 @@ export default function ResultsPage() {
                           onToggleFavorite={handleToggleFavorite}
                           onAddSubscriber={handleToggleReviewCardSubscriber}
                           onOpenDetail={setSelectedBusiness}
+                          openMenuKey={openActionMenuKey}
+                          onToggleMenu={setOpenActionMenuKey}
                         />
                       </td>
                     </tr>
@@ -753,8 +742,8 @@ export default function ResultsPage() {
           </div>
 
           <div className="grid gap-4 p-4 md:hidden">
-            <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
-              <p className="text-xs font-black uppercase text-slate-500">Sırala</p>
+            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <p className="text-xs font-semibold text-[#64748B]">Sırala</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {(isReviewCardMode
                   ? [
@@ -789,14 +778,14 @@ export default function ResultsPage() {
               return (
                 <article
                   key={getBusinessKey(business)}
-                  className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]"
+                  className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="font-heading text-xl font-black text-[#1E293B]">
+                      <h3 className="font-heading text-lg font-semibold text-[#0F172A]">
                         {business.businessName}
                       </h3>
-                      <p className="mt-1 text-sm font-bold text-slate-600">
+                      <p className="mt-1 text-sm text-[#64748B]">
                         {business.category} • {business.location}
                       </p>
                     </div>
@@ -816,7 +805,7 @@ export default function ResultsPage() {
                       <StatusBadge active={business.hasWebsite} label="Web Sitesi" />
                       <StatusBadge active={business.hasPhone} label="Telefon" />
                       {!business.hasWebsite ? (
-                        <span className="badge-pop bg-[#FBBF24]">
+                            <span className="badge-pop bg-[#FEF2F2] text-[#B91C1C]">
                           Web sitesi yok
                         </span>
                       ) : null}
@@ -839,33 +828,24 @@ export default function ResultsPage() {
                         helper={getWebDesignFitLabel(webDesignScore)}
                       />
                     )}
-                    <MetricBadge
-                      label="Fırsat Skoru"
-                      value={`⭐ ${business.leadScore}/100`}
-                    />
                   </div>
 
-                  <div className="mt-4 grid gap-3">
-                    {isReviewCardMode ? (
-                      <button
-                        type="button"
-                        onClick={() => handleToggleReviewCardSubscriber(business)}
-                        className={`btn-secondary w-full ${
-                          isReviewCardSubscriber(business) ? "bg-[#34D399]" : ""
-                        }`}
-                      >
-                        {isReviewCardSubscriber(business)
-                          ? "Abonelikten Çıkar"
-                          : "Yorum Kart Abonesi"}
-                      </button>
-                    ) : null}
+                  <div className="mt-4 flex gap-2">
                     <button
                       type="button"
                       onClick={() => setSelectedBusiness(business)}
-                      className="btn-primary w-full"
+                      className="btn-primary flex-1"
                     >
                       Detay
                     </button>
+                    <ResultsActionMenu
+                      business={business}
+                      intent={selectedIntent}
+                      isSubscriber={isReviewCardSubscriber(business)}
+                      openMenuKey={openActionMenuKey}
+                      onToggleMenu={setOpenActionMenuKey}
+                      onToggleSubscriber={handleToggleReviewCardSubscriber}
+                    />
                   </div>
                 </article>
               );
@@ -940,16 +920,16 @@ function BusinessDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
-      <section className="hard-shadow-lg max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-2 border-[#1E293B] bg-white">
-        <div className="flex items-start justify-between gap-4 border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4">
+      <section className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] bg-white px-5 py-4">
           <div>
-            <p className="page-eyebrow bg-[#34D399]">
+            <p className="page-eyebrow">
               {isReviewCardMode ? "Yorum Kart Adayı" : "Web Tasarım Adayı"}
             </p>
-            <h2 className="mt-3 font-heading text-3xl font-black tracking-tight text-[#1E293B]">
+            <h2 className="mt-3 font-heading text-2xl font-semibold tracking-tight text-[#0F172A]">
               {business.businessName}
             </h2>
-            <p className="mt-2 text-sm font-extrabold text-slate-600">
+            <p className="mt-2 text-sm font-medium text-[#64748B]">
               {isReviewCardMode
                 ? "Yorum ve güven artırma hizmetleri için değerlendirilebilir."
                 : "Web sitesi ve dijital vitrin teklifi için değerlendirilebilir."}
@@ -996,8 +976,8 @@ function BusinessDetailModal({
         </div>
 
         {isReviewCardMode ? (
-          <div className="border-t-2 border-[#1E293B] bg-[#FFFDF5] p-5">
-            <div className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]">
+        <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] p-5">
+            <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="font-heading text-2xl font-black text-[#1E293B]">
@@ -1017,14 +997,14 @@ function BusinessDetailModal({
                 {reviewCardReasons.map((reason) => (
                   <li
                     key={reason}
-                    className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3 text-sm font-bold text-[#1E293B]"
+                    className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3 text-sm font-medium text-[#0F172A]"
                   >
                     {reason}
                   </li>
                 ))}
               </ul>
 
-              <div className="mt-4 rounded-2xl border-2 border-[#1E293B] bg-[#FBBF24] p-4">
+              <div className="mt-4 rounded-lg border border-[#E2E8F0] bg-[#FFFBEB] p-4">
                 <p className="text-sm font-black text-[#1E293B]">
                   Bu işletmeye nasıl yaklaşılır?
                 </p>
@@ -1033,7 +1013,7 @@ function BusinessDetailModal({
                 </p>
               </div>
 
-              <div className="mt-4 rounded-2xl border-2 border-[#1E293B] bg-[#EDE9FE] p-4">
+              <div className="mt-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-black text-[#1E293B]">
                     Sektöre Göre Satış Açısı
@@ -1050,7 +1030,7 @@ function BusinessDetailModal({
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-3 border-t border-[#E2E8F0] px-5 py-4 sm:flex-row sm:justify-end">
           <a
             href={getSafeMapsUrl(business)}
             target="_blank"
@@ -1139,8 +1119,10 @@ function MobileSortButton({
       type="button"
       onClick={() => onSort(column)}
       aria-label={`${label} değerine göre sırala`}
-      className={`min-h-11 rounded-full border-2 border-[#1E293B] px-3 text-sm font-black transition ${
-        isActive ? "bg-[#8B5CF6] text-white" : "bg-white hover:bg-[#FBBF24]"
+      className={`min-h-10 rounded-lg border px-3 text-sm font-medium transition ${
+        isActive
+          ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+          : "border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F1F5F9]"
       }`}
     >
       {label} {indicator}
@@ -1150,9 +1132,9 @@ function MobileSortButton({
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
-      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
-      <p className="mt-2 text-sm font-extrabold text-[#1E293B]">{value}</p>
+    <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+      <p className="text-xs font-medium text-[#64748B]">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
     </div>
   );
 }
@@ -1165,6 +1147,8 @@ function BusinessActions({
   onToggleFavorite,
   onAddSubscriber,
   onOpenDetail,
+  openMenuKey,
+  onToggleMenu,
 }: {
   business: BusinessResult;
   intent: SelectedIntent;
@@ -1173,9 +1157,11 @@ function BusinessActions({
   onToggleFavorite: (business: BusinessResult) => void;
   onAddSubscriber: (business: BusinessResult) => void;
   onOpenDetail: (business: BusinessResult) => void;
+  openMenuKey: string | null;
+  onToggleMenu: (key: string | null) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex items-center gap-2">
       <button
         type="button"
         onClick={() => onToggleFavorite(business)}
@@ -1185,15 +1171,6 @@ function BusinessActions({
       >
         {isFavorite ? "❤️" : "♡"}
       </button>
-      {intent === "review-card" ? (
-        <button
-          type="button"
-          onClick={() => onAddSubscriber(business)}
-          className={`badge-pop min-h-10 ${isSubscriber ? "bg-[#34D399]" : "bg-white hover:bg-[#FBBF24]"}`}
-        >
-          {isSubscriber ? "Abonelikten Çıkar" : "Yorum Kart"}
-        </button>
-      ) : null}
       <button
         type="button"
         onClick={() => onOpenDetail(business)}
@@ -1201,6 +1178,81 @@ function BusinessActions({
       >
         Detay
       </button>
+      <ResultsActionMenu
+        business={business}
+        intent={intent}
+        isSubscriber={isSubscriber}
+        openMenuKey={openMenuKey}
+        onToggleMenu={onToggleMenu}
+        onToggleSubscriber={onAddSubscriber}
+      />
+    </div>
+  );
+}
+
+function ResultsActionMenu({
+  business,
+  intent,
+  isSubscriber,
+  openMenuKey,
+  onToggleMenu,
+  onToggleSubscriber,
+}: {
+  business: BusinessResult;
+  intent: SelectedIntent;
+  isSubscriber: boolean;
+  openMenuKey: string | null;
+  onToggleMenu: (key: string | null) => void;
+  onToggleSubscriber: (business: BusinessResult) => void;
+}) {
+  const menuKey = getBusinessKey(business);
+  const isOpen = openMenuKey === menuKey;
+
+  function closeMenu() {
+    onToggleMenu(null);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => onToggleMenu(isOpen ? null : menuKey)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            closeMenu();
+          }
+        }}
+        aria-label="İşletme işlemleri"
+        aria-expanded={isOpen}
+        className="btn-ghost min-h-10 px-3"
+      >
+        İşlemler
+      </button>
+      {isOpen ? (
+        <div className="absolute right-0 z-30 mt-2 w-56 rounded-lg border border-[#E2E8F0] bg-white p-1 shadow-lg">
+          <a
+            href={getSafeMapsUrl(business)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={closeMenu}
+            className="block rounded-md px-3 py-2 text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9]"
+          >
+            Google Maps
+          </a>
+          {intent === "review-card" ? (
+            <button
+              type="button"
+              onClick={() => {
+                onToggleSubscriber(business);
+                closeMenu();
+              }}
+              className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9]"
+            >
+              {isSubscriber ? "Abonelikten Çıkar" : "Yorum Kart Abonesi"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1234,11 +1286,11 @@ function MetricBadge({
   helper?: string;
 }) {
   return (
-    <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3">
-      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-black text-[#1E293B]">{value}</p>
+    <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+      <p className="text-xs font-medium text-[#64748B]">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
       {helper ? (
-        <p className="mt-1 text-xs font-extrabold text-slate-500">{helper}</p>
+        <p className="mt-1 text-xs text-[#64748B]">{helper}</p>
       ) : null}
     </div>
   );
@@ -1246,7 +1298,7 @@ function MetricBadge({
 
 function StatusBadge({ active, label }: { active: boolean; label?: string }) {
   return (
-    <span className={`badge-pop ${active ? "bg-[#34D399]" : "bg-[#FBBF24]"}`}>
+    <span className={`badge-pop ${active ? "bg-[#F0FDF4] text-[#166534]" : "bg-[#F1F5F9] text-[#475569]"}`}>
       {label ? `${label}: ` : ""}
       {active ? "Var" : "Yok"}
     </span>

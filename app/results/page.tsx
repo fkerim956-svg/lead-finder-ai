@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -45,89 +45,6 @@ type SortOption =
   | "reviewCardScore"
   | "webDesignScore";
 type SortDirection = "asc" | "desc";
-
-const demoBusinesses: Array<Omit<BusinessResult, "leadScore">> = [
-  {
-    businessName: "Moda Kahve Evi",
-    category: "Kafe",
-    location: "İstanbul / Kadıköy",
-    rating: 3.8,
-    reviewCount: 284,
-    hasWebsite: false,
-    hasPhone: true,
-    mapsUrl: "https://maps.google.com",
-  },
-  {
-    businessName: "Şehir Çekirdeği",
-    category: "Kafe",
-    location: "İstanbul / Beşiktaş",
-    rating: 4.1,
-    reviewCount: 197,
-    hasWebsite: false,
-    hasPhone: true,
-    mapsUrl: "https://maps.google.com",
-  },
-  {
-    businessName: "Kuzey Diş Kliniği",
-    category: "Diş Kliniği",
-    location: "Ankara / Çankaya",
-    rating: 3.9,
-    reviewCount: 126,
-    hasWebsite: true,
-    hasPhone: true,
-    mapsUrl: "https://maps.google.com",
-  },
-  {
-    businessName: "Işıltı Güzellik Salonu",
-    category: "Güzellik Salonu",
-    location: "İzmir / Konak",
-    rating: 4.4,
-    reviewCount: 342,
-    hasWebsite: false,
-    hasPhone: true,
-    mapsUrl: "https://maps.google.com",
-  },
-  {
-    businessName: "Mahalle Spor Salonu",
-    category: "Spor Salonu",
-    location: "Bursa / Nilüfer",
-    rating: 4.0,
-    reviewCount: 88,
-    hasWebsite: false,
-    hasPhone: false,
-    mapsUrl: "https://maps.google.com",
-  },
-  {
-    businessName: "Usta Oto Servis",
-    category: "Oto Servis",
-    location: "İstanbul / Ataşehir",
-    rating: 4.6,
-    reviewCount: 411,
-    hasWebsite: true,
-    hasPhone: true,
-    mapsUrl: "https://maps.google.com",
-  },
-  {
-    businessName: "Yeşil Tabak Mutfağı",
-    category: "Restoran",
-    location: "Antalya / Muratpaşa",
-    rating: 4.2,
-    reviewCount: 156,
-    hasWebsite: true,
-    hasPhone: true,
-    mapsUrl: "https://maps.google.com",
-  },
-  {
-    businessName: "Kadraj Stüdyo",
-    category: "Fotoğraf Stüdyosu",
-    location: "İstanbul / Şişli",
-    rating: 3.7,
-    reviewCount: 52,
-    hasWebsite: false,
-    hasPhone: true,
-    mapsUrl: "https://maps.google.com",
-  },
-];
 
 function getSelectedIntent(): SelectedIntent {
   if (typeof window === "undefined") {
@@ -247,8 +164,26 @@ function getSafeMapsUrl(
   );
 }
 
-function getAnalysisTitle(analysis: Pick<LatestAnalysis, "analysisName" | "district" | "category">) {
-  return analysis.analysisName?.trim() || `${analysis.district} ${analysis.category}`;
+function getAnalysisTitle(
+  analysis: Pick<LatestAnalysis, "analysisName" | "district" | "category">,
+) {
+  const fallbackName = [analysis.district, analysis.category]
+    .map((value) => value?.trim())
+    .filter(Boolean)
+    .join(" ");
+
+  return analysis.analysisName?.trim() || fallbackName || analysis.category || "İsimsiz Analiz";
+}
+
+function getAnalysisMetaLine(
+  analysis: Pick<LatestAnalysis, "city" | "district" | "category">,
+) {
+  const location = [analysis.city, analysis.district]
+    .map((value) => value?.trim())
+    .filter(Boolean)
+    .join(" / ");
+
+  return [location, analysis.category?.trim()].filter(Boolean).join(" • ");
 }
 
 function getIntentLabel(intent: SelectedIntent | undefined): string {
@@ -342,7 +277,7 @@ export default function ResultsPage() {
       };
 
   const businessesWithScore = useMemo<BusinessResult[]>(() => {
-    const businesses = latestAnalysis?.businesses ?? demoBusinesses;
+    const businesses = latestAnalysis?.businesses ?? [];
 
     return businesses.map((business) => ({
       ...business,
@@ -533,6 +468,10 @@ export default function ResultsPage() {
     return "Düşük potansiyel";
   }
 
+  const currentAnalysisMetaLine = latestAnalysis
+    ? getAnalysisMetaLine(latestAnalysis)
+    : "";
+
   return (
     <AppShell>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
@@ -545,8 +484,9 @@ export default function ResultsPage() {
             </p>
             {latestAnalysis ? (
               <p className="mt-3 w-fit rounded-full border-2 border-[#1E293B] bg-[#34D399] px-3 py-1 text-xs font-black text-[#1E293B]">
-                {latestAnalysis.country} / {latestAnalysis.city} /{" "}
-                {latestAnalysis.district} - {latestAnalysis.category}
+                {[latestAnalysis.country, currentAnalysisMetaLine]
+                  .filter(Boolean)
+                  .join(" • ")}
               </p>
             ) : null}
           </div>
@@ -564,9 +504,14 @@ export default function ResultsPage() {
                   ? `${getAnalysisTitle(latestAnalysis)} - ${formatAnalysisDate(
                       latestAnalysis.createdAt,
                     )}`
-                  : "Demo Sonuçlar"}
+                  : "Henüz açık bir analiz bulunmuyor."}
               </span>
             </p>
+            {currentAnalysisMetaLine ? (
+              <p className="mt-3 text-sm font-bold text-slate-600">
+                {currentAnalysisMetaLine}
+              </p>
+            ) : null}
           </div>
 
           <button
@@ -622,12 +567,11 @@ export default function ResultsPage() {
                             <span className="badge-pop bg-[#34D399]">
                               {getIntentLabel(analysis.selectedIntent)}
                             </span>
-                            <span className="badge-pop bg-white">
-                              {analysis.city} / {analysis.district}
-                            </span>
-                            <span className="badge-pop bg-[#FBBF24]">
-                              {analysis.category}
-                            </span>
+                            {getAnalysisMetaLine(analysis) ? (
+                              <span className="badge-pop bg-white">
+                                {getAnalysisMetaLine(analysis)}
+                              </span>
+                            ) : null}
                             <span className="badge-pop bg-[#EDE9FE]">
                               {analysis.businesses.length} işletme
                             </span>
@@ -648,6 +592,28 @@ export default function ResultsPage() {
             </div>
           ) : null}
         </section>
+
+        {!latestAnalysis ? (
+          <section className="card-pop grid gap-4 bg-white p-5">
+            <div>
+              <h2 className="font-heading text-2xl font-black text-[#1E293B]">
+                Henüz açık bir analiz bulunmuyor.
+              </h2>
+              <p className="mt-2 text-sm font-bold text-slate-600">
+                Dashboard üzerinden kayıtlı bir analizi açabilir veya yeni analiz
+                oluşturabilirsin.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link href="/dashboard" className="btn-primary">
+                Dashboard&apos;a Git
+              </Link>
+              <Link href="/new-analysis" className="btn-secondary">
+                Yeni Analiz
+              </Link>
+            </div>
+          </section>
+        ) : null}
 
         <section className="card-pop overflow-hidden">
           <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1286,3 +1252,4 @@ function StatusBadge({ active, label }: { active: boolean; label?: string }) {
     </span>
   );
 }
+

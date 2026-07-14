@@ -167,6 +167,57 @@ function dedupeBusinesses(businesses: BusinessResult[]): BusinessResult[] {
   });
 }
 
+function createAnalysisNameFromFiles(files: File[]): string {
+  const [firstFile] = files;
+  const fallbackName = `Manuel Analiz - ${new Date().toLocaleDateString("tr-TR")}`;
+
+  if (!firstFile) {
+    return fallbackName;
+  }
+
+  const baseName = firstFile.name
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!baseName) {
+    return fallbackName;
+  }
+
+  return files.length > 1 ? `${baseName} + ${files.length - 1} dosya` : baseName;
+}
+
+function validateAnalysisMetadata({
+  analysisName,
+  city,
+  district,
+  category,
+}: {
+  analysisName: string;
+  city: string;
+  district: string;
+  category: string;
+}): string {
+  if (!analysisName.trim()) {
+    return "Analiz adı boş bırakılamaz.";
+  }
+
+  if (analysisName.trim().length > 100) {
+    return "Analiz adı en fazla 100 karakter olabilir.";
+  }
+
+  if (
+    city.trim().length > 60 ||
+    district.trim().length > 60 ||
+    category.trim().length > 60
+  ) {
+    return "Şehir, ilçe ve kategori en fazla 60 karakter olabilir.";
+  }
+
+  return "";
+}
+
 export default function NewAnalysisPage() {
   const router = useRouter();
   const [selectedIntent] = useState<SelectedIntent>(getSelectedIntent);
@@ -178,6 +229,10 @@ export default function NewAnalysisPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [manualData, setManualData] = useState("");
+  const [manualAnalysisName, setManualAnalysisName] = useState("");
+  const [manualCity, setManualCity] = useState("");
+  const [manualDistrict, setManualDistrict] = useState("");
+  const [manualCategory, setManualCategory] = useState("Manuel Veri");
   const [manualImportMessage, setManualImportMessage] = useState("");
   const [selectedFileCount, setSelectedFileCount] = useState(0);
   const [parsedBusinesses, setParsedBusinesses] = useState<BusinessResult[]>([]);
@@ -197,21 +252,26 @@ export default function NewAnalysisPage() {
             "Google’da puanı düşük, yorumları zayıf veya müşteri güveni eksik görünen işletmeleri bul.",
         };
 
-  function getAnalysisDefaults() {
+  function getFinalAnalysisName(nextDistrict: string, nextCategory: string) {
+    const fallbackName = [nextDistrict.trim(), nextCategory.trim()]
+      .filter(Boolean)
+      .join(" ");
+
+    return analysisName.trim() || fallbackName || "İsimsiz Analiz";
+  }
+
+  function getManualMetadata() {
     return {
-      country: country.trim() || "Türkiye",
-      city: city.trim() || "İstanbul",
-      district: district.trim() || "Üsküdar",
-      category: category.trim() || "Manuel Veri",
+      country: "Türkiye",
+      city: manualCity.trim(),
+      district: manualDistrict.trim(),
+      category: manualCategory.trim() || "Manuel Veri",
+      analysisName: manualAnalysisName.trim(),
     };
   }
 
-  function getFinalAnalysisName(nextDistrict: string, nextCategory: string) {
-    return analysisName.trim() || `${nextDistrict} ${nextCategory}`;
-  }
-
   function rowsToBusinesses(rows: RawBusinessRow[]) {
-    const defaults = getAnalysisDefaults();
+    const metadata = getManualMetadata();
 
     return dedupeBusinesses(
       rows
@@ -219,9 +279,9 @@ export default function NewAnalysisPage() {
           normalizeBusinessFromRow(
             row,
             {
-              city: defaults.city,
-              district: defaults.district,
-              category: defaults.category,
+              city: metadata.city,
+              district: metadata.district,
+              category: metadata.category,
             },
             index,
           ),
@@ -250,12 +310,16 @@ export default function NewAnalysisPage() {
   }
 
   function saveBusinessesAsManualAnalysis(businesses: BusinessResult[]) {
-    const defaults = getAnalysisDefaults();
+    const metadata = getManualMetadata();
+    const metadataError = validateAnalysisMetadata(metadata);
+
+    if (metadataError) {
+      setErrorMessage(metadataError);
+      return;
+    }
 
     saveAnalysisToHistory({
-      ...defaults,
-      analysisName: getFinalAnalysisName(defaults.district, defaults.category),
-      category: defaults.category || "Manuel Veri",
+      ...metadata,
       createdAt: new Date().toISOString(),
       selectedIntent,
       businesses,
@@ -329,9 +393,9 @@ export default function NewAnalysisPage() {
 
     try {
       const businesses =
-        parsedBusinesses.length > 0
-          ? parsedBusinesses
-          : parseAndPreviewManualData(manualData);
+        manualData.trim().length > 0
+          ? parseAndPreviewManualData(manualData)
+          : parsedBusinesses;
 
       if (businesses.length === 0) {
         setErrorMessage(
@@ -359,6 +423,10 @@ export default function NewAnalysisPage() {
     }
 
     try {
+      if (!manualAnalysisName.trim()) {
+        setManualAnalysisName(createAnalysisNameFromFiles(files));
+      }
+
       const fileTexts = await Promise.all(files.map((file) => file.text()));
       const allRows = fileTexts.flatMap(parseManualRows);
       const businesses = rowsToBusinesses(allRows);
@@ -487,6 +555,53 @@ export default function NewAnalysisPage() {
               Google API bağlanmadan önce kendi topladığınız CSV veya JSON
               verileriyle sistemi test edebilirsiniz.
             </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <SelectField label="Analiz adı">
+                <input
+                  type="text"
+                  value={manualAnalysisName}
+                  onChange={(event) => setManualAnalysisName(event.target.value)}
+                  placeholder="Örn: Eyüpsultan Çiçekçiler - Temmuz"
+                  className="input-pop"
+                />
+                <span className="text-xs font-bold text-slate-500">
+                  Bu isim Dashboard ve Analiz Geçmişi bölümünde görünecek.
+                </span>
+              </SelectField>
+            </div>
+
+            <SelectField label="Şehir">
+              <input
+                type="text"
+                value={manualCity}
+                onChange={(event) => setManualCity(event.target.value)}
+                placeholder="Örn: İstanbul"
+                className="input-pop"
+              />
+            </SelectField>
+
+            <SelectField label="İlçe">
+              <input
+                type="text"
+                value={manualDistrict}
+                onChange={(event) => setManualDistrict(event.target.value)}
+                placeholder="Örn: Eyüpsultan"
+                className="input-pop"
+              />
+            </SelectField>
+
+            <SelectField label="Kategori">
+              <input
+                type="text"
+                value={manualCategory}
+                onChange={(event) => setManualCategory(event.target.value)}
+                placeholder="Örn: Çiçekçi"
+                className="input-pop"
+              />
+            </SelectField>
           </div>
 
           <textarea

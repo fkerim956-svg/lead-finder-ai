@@ -141,30 +141,7 @@ function getFieldByPosition(row: RawBusinessRow, index: number): string {
   return cleanText(Object.values(row)[index]);
 }
 
-function appendContextIfNeeded(
-  location: string,
-  district: string,
-  city: string,
-): string {
-  const normalizedLocation = location.toLocaleLowerCase("tr-TR");
-  const additions = [];
-
-  if (district && !normalizedLocation.includes(district.toLocaleLowerCase("tr-TR"))) {
-    additions.push(district);
-  }
-
-  if (city && !normalizedLocation.includes(city.toLocaleLowerCase("tr-TR"))) {
-    additions.push(city);
-  }
-
-  return additions.length > 0 ? `${location}, ${additions.join(", ")}` : location;
-}
-
-export function normalizeLocation(
-  row: RawBusinessRow,
-  district: string,
-  city: string,
-): string {
+export function normalizeLocation(row: RawBusinessRow): string {
   const explicitLocation = getField(row, [
     "Konum",
     "Adres",
@@ -174,13 +151,13 @@ export function normalizeLocation(
   ]);
 
   if (explicitLocation) {
-    return appendContextIfNeeded(explicitLocation, district, city);
+    return explicitLocation;
   }
 
   const googleLocation = getField(row, googleScrapedColumns.location);
 
   if (isAddressLike(googleLocation)) {
-    return appendContextIfNeeded(googleLocation, district, city);
+    return googleLocation;
   }
 
   const fallbackLocation = googleScrapedColumns.fallbackLocation
@@ -188,10 +165,10 @@ export function normalizeLocation(
     .find(isAddressLike);
 
   if (fallbackLocation) {
-    return appendContextIfNeeded(fallbackLocation, district, city);
+    return fallbackLocation;
   }
 
-  return `${district}, ${city}`;
+  return "";
 }
 
 function getMapsUrlFromRow(row: RawBusinessRow): string {
@@ -272,7 +249,7 @@ export function normalizeBusinessFromRow(
       ...googleScrapedColumns.reviewCount,
     ]) || getFieldByPosition(row, 3),
   );
-  const location = normalizeLocation(row, context.district, context.city);
+  const location = normalizeLocation(row);
   const website = getField(row, ["Web Sitesi", "website", "web", "websiteUri"]);
   const phone = getField(row, ["Telefon", "phone", "telephone", "nationalPhoneNumber"]);
   const hasWebsite = parseBooleanPresence(website);

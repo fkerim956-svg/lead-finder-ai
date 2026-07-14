@@ -11,12 +11,42 @@ import type {
 
 const maxHistoryItems = 50;
 
+type AnalysisMetadataUpdate = {
+  analysisName: string;
+  city: string;
+  district: string;
+  category: string;
+};
+
 function createAnalysisId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
 
   return `analysis-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createStableLegacyAnalysisId(
+  analysis: LatestAnalysis,
+  index: number,
+): string {
+  const source = [
+    analysis.createdAt,
+    analysis.analysisName,
+    analysis.country,
+    analysis.city,
+    analysis.district,
+    analysis.category,
+    analysis.businesses?.length ?? 0,
+    index,
+  ].join("|");
+  let hash = 0;
+
+  for (let index = 0; index < source.length; index += 1) {
+    hash = (hash * 31 + source.charCodeAt(index)) | 0;
+  }
+
+  return `legacy-analysis-${Math.abs(hash).toString(36)}`;
 }
 
 function getSelectedIntent(): SelectedIntent | undefined {
@@ -30,19 +60,47 @@ function getSelectedIntent(): SelectedIntent | undefined {
     : "review-card";
 }
 
-function normalizeAnalysis(analysis: LatestAnalysis): AnalysisHistoryItem {
+function sortHistory(history: AnalysisHistoryItem[]): AnalysisHistoryItem[] {
+  return history.toSorted(
+    (first, second) =>
+      new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime(),
+  );
+}
+
+function normalizeAnalysis(
+  analysis: LatestAnalysis,
+  fallbackId?: string,
+): AnalysisHistoryItem {
   const createdAt = analysis.createdAt || new Date().toISOString();
   const selectedIntent = analysis.selectedIntent ?? getSelectedIntent();
   const analysisName = analysis.analysisName?.trim() || undefined;
 
   return {
     ...analysis,
-    id: analysis.id ?? createAnalysisId(),
+    id: analysis.id ?? fallbackId ?? createAnalysisId(),
     analysisName,
+    country: analysis.country || "Türkiye",
+    city: analysis.city ?? "",
+    district: analysis.district ?? "",
+    category: analysis.category || "Manuel Veri",
     createdAt,
     selectedIntent,
-    businessCount: analysis.businesses.length,
+    businesses: Array.isArray(analysis.businesses) ? analysis.businesses : [],
+    businessCount: Array.isArray(analysis.businesses)
+      ? analysis.businesses.length
+      : 0,
   };
+}
+
+function saveHistory(history: AnalysisHistoryItem[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    ANALYSIS_HISTORY_STORAGE_KEY,
+    JSON.stringify(sortHistory(history).slice(0, maxHistoryItems)),
+  );
 }
 
 export function getAnalysisHistory(): AnalysisHistoryItem[] {
@@ -57,14 +115,29 @@ export function getAnalysisHistory(): AnalysisHistoryItem[] {
   }
 
   try {
-    const parsedHistory = JSON.parse(savedHistory) as AnalysisHistoryItem[];
+    const parsedHistory = JSON.parse(savedHistory) as LatestAnalysis[];
+    let migratedLegacyIds = false;
 
-    return parsedHistory
-      .filter((analysis) => analysis.id && Array.isArray(analysis.businesses))
-      .map((analysis) => ({
-        ...analysis,
-        businessCount: analysis.businesses.length,
-      }));
+    const history = parsedHistory
+      .filter((analysis) => Array.isArray(analysis.businesses))
+      .map((analysis, index) => {
+        if (!analysis.id) {
+          migratedLegacyIds = true;
+        }
+
+        return normalizeAnalysis(
+          analysis,
+          analysis.id ?? createStableLegacyAnalysisId(analysis, index),
+        );
+      });
+
+    const sortedHistory = sortHistory(history);
+
+    if (migratedLegacyIds) {
+      saveHistory(sortedHistory);
+    }
+
+    return sortedHistory;
   } catch {
     window.localStorage.removeItem(ANALYSIS_HISTORY_STORAGE_KEY);
     return [];
@@ -83,7 +156,14 @@ export function getLatestAnalysis(): LatestAnalysis | null {
   }
 
   try {
-    return JSON.parse(savedAnalysis) as LatestAnalysis;
+    const parsedAnalysis = JSON.parse(savedAnalysis) as LatestAnalysis;
+
+    if (!Array.isArray(parsedAnalysis.businesses)) {
+      window.localStorage.removeItem(LATEST_ANALYSIS_STORAGE_KEY);
+      return null;
+    }
+
+    return normalizeAnalysis(parsedAnalysis);
   } catch {
     window.localStorage.removeItem(LATEST_ANALYSIS_STORAGE_KEY);
     return null;
@@ -103,6 +183,14 @@ export function setLatestAnalysis(analysis: LatestAnalysis): AnalysisHistoryItem
   return normalizedAnalysis;
 }
 
+export function clearLatestAnalysis(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(LATEST_ANALYSIS_STORAGE_KEY);
+}
+
 export function saveAnalysisToHistory(
   analysis: LatestAnalysis,
 ): AnalysisHistoryItem {
@@ -116,21 +204,39 @@ export function saveAnalysisToHistory(
   const withoutDuplicate = history.filter(
     (historyItem) => historyItem.id !== normalizedAnalysis.id,
   );
+  const nextHistory = [normalizedAnalysis, ...withoutDuplicate];
 
-  const nextHistory = [normalizedAnalysis, ...withoutDuplicate]
-    .toSorted(
-      (first, second) =>
-        new Date(second.createdAt).getTime() -
-        new Date(first.createdAt).getTime(),
-    )
-    .slice(0, maxHistoryItems);
-
-  window.localStorage.setItem(
-    ANALYSIS_HISTORY_STORAGE_KEY,
-    JSON.stringify(nextHistory),
-  );
+  saveHistory(nextHistory);
 
   return normalizedAnalysis;
+}
+
+export function updateAnalysisMetadata(
+  id: string,
+  metadata: AnalysisMetadataUpdate,
+): AnalysisHistoryItem[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const nextMetadata = {
+    analysisName: metadata.analysisName.trim(),
+    city: metadata.city.trim(),
+    district: metadata.district.trim(),
+    category: metadata.category.trim() || "Manuel Veri",
+  };
+  const nextHistory = getAnalysisHistory().map((analysis) =>
+    analysis.id === id ? { ...analysis, ...nextMetadata } : analysis,
+  );
+  const latestAnalysis = getLatestAnalysis();
+
+  if (latestAnalysis?.id === id) {
+    setLatestAnalysis({ ...latestAnalysis, ...nextMetadata });
+  }
+
+  saveHistory(nextHistory);
+
+  return getAnalysisHistory();
 }
 
 export function removeAnalysisFromHistory(id: string): AnalysisHistoryItem[] {
@@ -141,11 +247,35 @@ export function removeAnalysisFromHistory(id: string): AnalysisHistoryItem[] {
   const nextHistory = getAnalysisHistory().filter(
     (analysis) => analysis.id !== id,
   );
+  const latestAnalysis = getLatestAnalysis();
 
-  window.localStorage.setItem(
-    ANALYSIS_HISTORY_STORAGE_KEY,
-    JSON.stringify(nextHistory),
+  if (latestAnalysis?.id === id) {
+    clearLatestAnalysis();
+  }
+
+  saveHistory(nextHistory);
+
+  return nextHistory;
+}
+
+export function removeAnalysesFromHistory(
+  ids: string[],
+): AnalysisHistoryItem[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const idSet = new Set(ids);
+  const nextHistory = getAnalysisHistory().filter(
+    (analysis) => !idSet.has(analysis.id),
   );
+  const latestAnalysis = getLatestAnalysis();
+
+  if (latestAnalysis?.id && idSet.has(latestAnalysis.id)) {
+    clearLatestAnalysis();
+  }
+
+  saveHistory(nextHistory);
 
   return nextHistory;
 }
@@ -154,26 +284,14 @@ export function renameAnalysisInHistory(
   id: string,
   analysisName: string,
 ): AnalysisHistoryItem[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
+  const analysis = getAnalysisHistory().find((historyItem) => historyItem.id === id);
 
-  const nextName = analysisName.trim() || undefined;
-  const nextHistory = getAnalysisHistory().map((analysis) =>
-    analysis.id === id ? { ...analysis, analysisName: nextName } : analysis,
-  );
-  const latestAnalysis = getLatestAnalysis();
-
-  if (latestAnalysis?.id === id) {
-    setLatestAnalysis({ ...latestAnalysis, analysisName: nextName });
-  }
-
-  window.localStorage.setItem(
-    ANALYSIS_HISTORY_STORAGE_KEY,
-    JSON.stringify(nextHistory),
-  );
-
-  return nextHistory;
+  return updateAnalysisMetadata(id, {
+    analysisName,
+    city: analysis?.city ?? "",
+    district: analysis?.district ?? "",
+    category: analysis?.category ?? "Manuel Veri",
+  });
 }
 
 export function clearAnalysisHistory(): void {
@@ -182,4 +300,5 @@ export function clearAnalysisHistory(): void {
   }
 
   window.localStorage.removeItem(ANALYSIS_HISTORY_STORAGE_KEY);
+  clearLatestAnalysis();
 }

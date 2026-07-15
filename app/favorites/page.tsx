@@ -381,7 +381,7 @@ export default function FavoritesPage() {
                   </p>
                 </div>
               ) : (
-                <div className="divide-y-2 divide-[#1E293B]">
+                <div className="divide-y divide-[#E2E8F0]">
                   {sortedFavorites.map((business) => (
                     <FavoriteCompactItem
                       key={`${business.businessName}-${business.location}`}
@@ -390,7 +390,6 @@ export default function FavoritesPage() {
                       isSubscriber={isReviewCardSubscriber(business)}
                       onOpenDetail={setSelectedDetailBusiness}
                       onToggleSubscriber={handleToggleSubscriber}
-                      onUpdateFavorite={handleUpdateFavorite}
                     />
                   ))}
                 </div>
@@ -439,17 +438,12 @@ function FavoriteCompactItem({
   isSubscriber,
   onOpenDetail,
   onToggleSubscriber,
-  onUpdateFavorite,
 }: {
   business: FavoriteBusiness;
   isReviewCardMode: boolean;
   isSubscriber: boolean;
   onOpenDetail: (business: FavoriteBusiness) => void;
   onToggleSubscriber: (business: FavoriteBusiness) => void;
-  onUpdateFavorite: (
-    business: FavoriteBusiness,
-    updates: Pick<FavoriteBusiness, "note" | "tag">,
-  ) => void;
 }) {
   const primaryScore = isReviewCardMode
     ? getReviewCardScore(business)
@@ -457,7 +451,7 @@ function FavoriteCompactItem({
   const primaryScoreLabel = isReviewCardMode ? "Yorum Kart" : "Web Tasarım";
 
   return (
-    <article className="grid gap-4 bg-white p-4 lg:grid-cols-[minmax(0,1.6fr)_0.45fr_0.45fr_0.75fr_0.8fr_1.35fr] lg:items-center">
+    <article className="grid gap-4 bg-white p-4 transition hover:bg-[#F8FAFC] lg:grid-cols-[minmax(0,1fr)_92px_92px_132px_178px] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-heading text-base font-semibold text-[#0F172A]">
@@ -487,27 +481,18 @@ function FavoriteCompactItem({
         <CompactMetric label={primaryScoreLabel} value={`${primaryScore}/100`} />
       </div>
 
-      <div>
-        <p className="mb-2 text-xs font-medium text-[#64748B]">Durum</p>
-        <TagSelect
-          value={business.tag ?? ""}
-          onChange={(tag) => onUpdateFavorite(business, { tag })}
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-2 lg:justify-end">
-        <a
-          href={getSafeMapsUrl(business)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC]"
-        >
-          Google Maps
-        </a>
+      <div
+        className={`grid gap-2 lg:flex lg:flex-nowrap lg:items-center lg:justify-end lg:whitespace-nowrap ${
+          isReviewCardMode
+            ? "grid-cols-[44px_1fr_44px]"
+            : "grid-cols-[44px_1fr]"
+        }`}
+      >
+        <MapsIconButton business={business} />
         <button
           type="button"
           onClick={() => onOpenDetail(business)}
-          className="btn-secondary min-h-11 px-4 text-xs"
+          className="inline-flex h-11 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-3 text-sm font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] lg:h-10 lg:text-xs"
         >
           Detay
         </button>
@@ -680,7 +665,7 @@ function MobileSortButton({
     <button
       type="button"
       onClick={() => onSort(column)}
-      className={`min-h-10 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+      className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
         isActive
           ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
           : "border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F1F5F9]"
@@ -709,6 +694,21 @@ function CompactMetric({
   );
 }
 
+function MapsIconButton({ business }: { business: FavoriteBusiness }) {
+  return (
+    <a
+      href={getSafeMapsUrl(business)}
+      target="_blank"
+      rel="noreferrer"
+      title="Google Maps'te aç"
+      aria-label="Google Maps'te aç"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white text-lg text-[#0F172A] transition hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] lg:h-10 lg:w-10"
+    >
+      <span aria-hidden="true">📍</span>
+    </a>
+  );
+}
+
 function SubscriberButton({
   business,
   isSubscriber,
@@ -724,7 +724,7 @@ function SubscriberButton({
     <button
       type="button"
       onClick={() => onToggleSubscriber(business)}
-      className={`${wide ? "w-full" : ""} inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border text-lg font-bold transition focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#16A34A] ${
+      className={`${wide ? "w-full" : ""} inline-flex h-11 w-11 items-center justify-center rounded-lg border text-lg font-bold transition focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#16A34A] lg:h-10 lg:w-10 ${
         isSubscriber
           ? "border-[#16A34A] bg-[#16A34A] text-white hover:bg-[#15803D]"
           : "border-[#16A34A] bg-[#F0FDF4] text-[#16A34A] hover:bg-[#DCFCE7]"

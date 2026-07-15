@@ -306,7 +306,9 @@ export default function FavoritesPage() {
     <AppShell>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
         <header>
-          <p className="page-eyebrow">{isReviewCardMode ? "Yorum Kart" : "Web Tasarım"} Modu</p>
+          <p className={isReviewCardMode ? "badge-review" : "badge-web"}>
+            {isReviewCardMode ? "Yorum Kart" : "Web Tasarım"} Modu
+          </p>
           <h1 className="page-title mt-5">Favoriler</h1>
           <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
             Görüşmeye gidilecek işletmeleri sade bir listede takip edin.
@@ -317,17 +319,17 @@ export default function FavoritesPage() {
           <SummaryCard
             label="Toplam Favori"
             value={summaryStats.totalFavorites}
-            color="#EDE9FE"
+            tone="purple"
           />
           <SummaryCard
             label="Görüşmeye Gidilecek"
             value={summaryStats.meetingCount}
-            color="#FBBF24"
+            tone="amber"
           />
           <SummaryCard
             label="Abone Yapıldı"
             value={summaryStats.subscriberCount}
-            color="#34D399"
+            tone="green"
           />
         </section>
 
@@ -458,15 +460,22 @@ export default function FavoritesPage() {
 function SummaryCard({
   label,
   value,
+  tone,
 }: {
   label: string;
   value: string | number;
-  color: string;
+  tone: "purple" | "amber" | "green";
 }) {
+  const toneClass = {
+    purple: "border-t-violet-500 text-[#6D28D9]",
+    amber: "border-t-amber-500 text-[#D97706]",
+    green: "border-t-green-600 text-[#16A34A]",
+  }[tone];
+
   return (
-    <article className="card-pop bg-white p-4">
+    <article className={`card-pop border-t-2 bg-white p-4 ${toneClass}`}>
       <p className="text-xs font-medium text-[#64748B]">{label}</p>
-      <p className="mt-2 font-heading text-2xl font-semibold text-[#0F172A]">
+      <p className={`mt-2 font-heading text-2xl font-semibold ${toneClass}`}>
         {value}
       </p>
     </article>
@@ -500,7 +509,7 @@ function FavoriteCompactItem({
           <h3 className="font-heading text-base font-semibold text-[#0F172A]">
             {business.businessName}
           </h3>
-          <span className="badge-pop bg-[#EFF6FF] text-[#2563EB]">
+          <span className={isReviewCardBusiness ? "badge-review" : "badge-web"}>
             {isReviewCardBusiness ? "Yorum Kart" : "Web Tasarım"}
           </span>
         </div>
@@ -510,13 +519,20 @@ function FavoriteCompactItem({
         <div className="mt-3 flex flex-wrap gap-2 lg:hidden">
           <CompactMetric label="Puan" value={business.rating.toFixed(1)} />
           <CompactMetric label="Yorum" value={business.reviewCount} />
-          <CompactMetric label={primaryScoreLabel} value={`${primaryScore}/100`} />
+          <CompactMetric
+            label={primaryScoreLabel}
+            value={`${primaryScore}/100`}
+            tone={isReviewCardBusiness ? "review" : "web"}
+          />
         </div>
       </div>
 
       <DesktopMetricValue value={business.rating.toFixed(1)} />
       <DesktopMetricValue value={business.reviewCount} />
-      <DesktopMetricValue value={`${primaryScore}/100`} />
+      <DesktopMetricValue
+        value={`${primaryScore}/100`}
+        tone={isReviewCardBusiness ? "review" : "web"}
+      />
 
       <div
         className={`grid gap-2 lg:flex lg:flex-nowrap lg:items-center lg:justify-end lg:whitespace-nowrap ${
@@ -575,7 +591,7 @@ function FavoriteDetailModal({
       <section className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] bg-white px-5 py-4">
           <div>
-            <p className="page-eyebrow">
+            <p className={isReviewCardMode ? "badge-review" : "badge-web"}>
               {isReviewCardMode ? "Yorum Kart" : "Web Tasarım"}
             </p>
             <h2 className="mt-3 font-heading text-2xl font-semibold text-[#0F172A]">
@@ -598,11 +614,13 @@ function FavoriteDetailModal({
               <MetricBadge
                 label="Yorum Kart"
                 value={`${reviewCardScore}/100`}
+                tone="review"
               />
             ) : (
             <MetricBadge
                 label="Web Tasarım"
                 value={`${webDesignScore}/100`}
+                tone="web"
               />
             )}
           </div>
@@ -639,7 +657,7 @@ function FavoriteDetailModal({
             href={getSafeMapsUrl(business)}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-4 text-sm font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC]"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-4 text-sm font-semibold text-[#2563EB] transition hover:bg-[#DBEAFE]"
           >
             Google Maps
           </a>
@@ -720,21 +738,43 @@ function FavoriteSortableHeader({
 function CompactMetric({
   label,
   value,
+  tone = "neutral",
 }: {
   label: string;
   value: string | number;
+  tone?: "review" | "web" | "neutral";
 }) {
+  const valueClass =
+    tone === "review"
+      ? "text-[#6D28D9]"
+      : tone === "web"
+        ? "text-[#0E7490]"
+        : "text-[#0F172A]";
+
   return (
     <div>
       <p className="text-xs font-medium text-[#64748B]">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
+      <p className={`mt-1 text-sm font-semibold ${valueClass}`}>{value}</p>
     </div>
   );
 }
 
-function DesktopMetricValue({ value }: { value: string | number }) {
+function DesktopMetricValue({
+  value,
+  tone = "neutral",
+}: {
+  value: string | number;
+  tone?: "review" | "web" | "neutral";
+}) {
+  const valueClass =
+    tone === "review"
+      ? "text-[#6D28D9]"
+      : tone === "web"
+        ? "text-[#0E7490]"
+        : "text-[#0F172A]";
+
   return (
-    <div className="hidden text-sm font-semibold text-[#0F172A] lg:block">
+    <div className={`hidden text-sm font-semibold ${valueClass} lg:block`}>
       {value}
     </div>
   );
@@ -748,7 +788,7 @@ function MapsIconButton({ business }: { business: FavoriteBusiness }) {
       rel="noreferrer"
       title="Google Maps'te aç"
       aria-label="Google Maps'te aç"
-      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white text-lg text-[#0F172A] transition hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] lg:h-10 lg:w-10"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-lg text-[#2563EB] transition hover:bg-[#DBEAFE] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] lg:h-10 lg:w-10"
     >
       <span aria-hidden="true">📍</span>
     </a>
@@ -816,15 +856,24 @@ function MetricBadge({
   label,
   value,
   helper,
+  tone = "neutral",
 }: {
   label: string;
   value: string;
   helper?: string;
+  tone?: "review" | "web" | "neutral";
 }) {
+  const valueClass =
+    tone === "review"
+      ? "text-[#6D28D9]"
+      : tone === "web"
+        ? "text-[#0E7490]"
+        : "text-[#0F172A]";
+
   return (
     <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
       <p className="text-xs font-medium text-[#64748B]">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
+      <p className={`mt-1 text-sm font-semibold ${valueClass}`}>{value}</p>
       {helper ? (
         <p className="mt-1 text-xs text-[#64748B]">{helper}</p>
       ) : null}
@@ -834,7 +883,7 @@ function MetricBadge({
 
 function StatusBadge({ active, label }: { active: boolean; label?: string }) {
   return (
-    <span className={`badge-pop ${active ? "bg-[#F0FDF4] text-[#166534]" : "bg-[#F1F5F9] text-[#475569]"}`}>
+    <span className={active ? "badge-success" : "badge-neutral"}>
       {label ? `${label}: ` : ""}
       {active ? "Var" : "Yok"}
     </span>

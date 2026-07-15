@@ -175,7 +175,7 @@ export default function SubscribersPage() {
     <AppShell>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
         <header>
-          <p className="page-eyebrow">Yorum Kart</p>
+          <p className="badge-review">Yorum Kart</p>
           <h1 className="page-title mt-5">Yorum Kart Aboneleri</h1>
           <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
             Abone işletmeleri, durumlarını ve satış sonrası notları takip edin.
@@ -443,7 +443,7 @@ function SubscriberDetailModal({
       <section className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] bg-white px-5 py-4">
           <div>
-            <p className="page-eyebrow">Abone Detayı</p>
+            <p className="badge-review">Abone Detayı</p>
             <h2 className="mt-3 font-heading text-2xl font-semibold text-[#0F172A]">
               {subscriber.businessName}
             </h2>
@@ -469,6 +469,7 @@ function SubscriberDetailModal({
               label="Yorum Kart"
               value={`${reviewCardScore}/100`}
               helper={getReviewCardRiskLevel(reviewCardScore)}
+              tone="review"
             />
           </div>
 
@@ -556,18 +557,24 @@ function SubscriberStatusSelect({
 
 function SubscriberStatusBadge({ status }: { status?: string }) {
   const label = status || "Aktif Abone";
+  const className =
+    label === "Aktif Abone"
+      ? "badge-success"
+      : label === "Kurulum Yapılacak" || label === "Kart Teslim Edilecek"
+        ? "badge-info"
+        : label === "Takip Edilecek" || label === "Yenileme Görüşülecek"
+          ? "badge-warning"
+          : label === "İptal"
+            ? "badge-danger"
+            : "badge-neutral";
 
-  return (
-    <span className="badge-pop bg-[#EFF6FF] text-[#2563EB]">{label}</span>
-  );
+  return <span className={className}>{label}</span>;
 }
 
 function AccountingStateBadge({ hasRecord }: { hasRecord: boolean }) {
   return (
     <span
-      className={`badge-pop ${
-        hasRecord ? "bg-[#F0FDF4] text-[#166534]" : "bg-[#F1F5F9] text-[#475569]"
-      }`}
+      className={hasRecord ? "badge-success" : "badge-neutral"}
     >
       {hasRecord ? "Kayıt Var" : "Kayıt Yok"}
     </span>
@@ -587,15 +594,19 @@ function MetricBadge({
   label,
   value,
   helper,
+  tone = "neutral",
 }: {
   label: string;
   value: string;
   helper?: string;
+  tone?: "review" | "neutral";
 }) {
+  const valueClass = tone === "review" ? "text-[#6D28D9]" : "text-[#0F172A]";
+
   return (
     <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
       <p className="text-xs font-medium text-[#64748B]">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
+      <p className={`mt-1 text-sm font-semibold ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-1 text-xs text-[#64748B]">{helper}</p> : null}
     </div>
   );

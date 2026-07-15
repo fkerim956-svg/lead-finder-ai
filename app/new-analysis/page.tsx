@@ -251,6 +251,12 @@ export default function NewAnalysisPage() {
   const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
   const [parsedBusinesses, setParsedBusinesses] = useState<BusinessResult[]>([]);
   const availableDistricts = districtsByProvince[city] ?? [];
+  const modeBadgeClass =
+    selectedIntent === "web-design" ? "badge-web" : "badge-review";
+  const modePanelClass =
+    selectedIntent === "web-design"
+      ? "border-cyan-200 bg-cyan-50 text-cyan-700"
+      : "border-violet-200 bg-violet-50 text-violet-700";
   const intentContent =
     selectedIntent === "web-design"
       ? {
@@ -497,7 +503,7 @@ export default function NewAnalysisPage() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
         <header className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-medium text-blue-700">{intentContent.label} Modu</p>
+            <p className={modeBadgeClass}>{intentContent.label} Modu</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
               {intentContent.title}
             </h1>
@@ -518,7 +524,7 @@ export default function NewAnalysisPage() {
                 onClick={() => setActiveTab("search")}
                 className={`min-h-10 rounded-md px-3 text-sm font-semibold transition ${
                   activeTab === "search"
-                    ? "bg-white text-slate-950 shadow-sm"
+                    ? "border border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
                     : "text-slate-600 hover:text-slate-950"
                 }`}
               >
@@ -529,7 +535,7 @@ export default function NewAnalysisPage() {
                 onClick={() => setActiveTab("manual")}
                 className={`min-h-10 rounded-md px-3 text-sm font-semibold transition ${
                   activeTab === "manual"
-                    ? "bg-white text-slate-950 shadow-sm"
+                    ? "border border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
                     : "text-slate-600 hover:text-slate-950"
                 }`}
               >
@@ -548,6 +554,11 @@ export default function NewAnalysisPage() {
                   Seçili amaç: {intentContent.label}. Bu bilgiler analiz raporunun
                   temelini oluşturur.
                 </p>
+                <span
+                  className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${modePanelClass}`}
+                >
+                  {intentContent.label} için mode accent aktif
+                </span>
               </div>
 
               <Field label="Analiz amacı">
@@ -629,7 +640,7 @@ export default function NewAnalysisPage() {
                 <h2 className="text-lg font-semibold text-slate-950">
                   Manuel CSV / JSON yükle
                 </h2>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                <p className="mt-1 max-w-3xl rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-800">
                   Şehir ve ilçe bilgileri rapor metadata’sı içindir. CSV/JSON içindeki
                   işletme adresleri değiştirilmez.
                 </p>

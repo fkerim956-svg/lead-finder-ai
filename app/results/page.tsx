@@ -454,13 +454,15 @@ export default function ResultsPage() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
         <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
           <div>
-            <p className="page-eyebrow">{pageContent.label} Modu</p>
+            <p className={isReviewCardMode ? "badge-review" : "badge-web"}>
+              {pageContent.label} Modu
+            </p>
             <h1 className="page-title mt-5">{pageContent.title}</h1>
             <p className="muted-text mt-4 max-w-3xl text-base font-medium leading-7">
               {pageContent.subtitle}
             </p>
             {latestAnalysis ? (
-              <p className="mt-3 w-fit rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-1 text-xs font-semibold text-[#2563EB]">
+              <p className="mt-3 badge-info">
                 {[latestAnalysis.country, currentAnalysisMetaLine]
                   .filter(Boolean)
                   .join(" • ")}
@@ -678,13 +680,13 @@ export default function ResultsPage() {
                           <ScoreBadge
                             score={reviewCardScore}
                             label={getReviewCardFitLabel(reviewCardScore)}
-                            color="#EDE9FE"
+                            tone="review"
                           />
                         ) : (
                           <ScoreBadge
                             score={webDesignScore}
                             label={getWebDesignFitLabel(webDesignScore)}
-                            color="#DBEAFE"
+                            tone="web"
                           />
                         )}
                       </td>
@@ -768,12 +770,14 @@ export default function ResultsPage() {
                         label="Yorum Kart"
                         value={`${reviewCardScore}/100`}
                         helper={getReviewCardFitLabel(reviewCardScore)}
+                        tone="review"
                       />
                     ) : (
                       <MetricBadge
                         label="Web Tasarım"
                         value={`${webDesignScore}/100`}
                         helper={getWebDesignFitLabel(webDesignScore)}
+                        tone="web"
                       />
                     )}
                   </div>
@@ -874,7 +878,7 @@ function BusinessDetailModal({
       <section className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] bg-white px-5 py-4">
           <div>
-            <p className="page-eyebrow">
+            <p className={isReviewCardMode ? "badge-review" : "badge-web"}>
               {isReviewCardMode ? "Yorum Kart Adayı" : "Web Tasarım Adayı"}
             </p>
             <h2 className="mt-3 font-heading text-2xl font-semibold tracking-tight text-[#0F172A]">
@@ -1116,7 +1120,7 @@ function MapsIconButton({ business }: { business: BusinessResult }) {
       rel="noreferrer"
       title="Google Maps'te aç"
       aria-label="Google Maps'te aç"
-      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white text-lg text-[#0F172A] transition hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] md:h-10 md:w-10"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-lg text-[#2563EB] transition hover:bg-[#DBEAFE] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] md:h-10 md:w-10"
     >
       <span aria-hidden="true">📍</span>
     </a>
@@ -1156,18 +1160,24 @@ function SubscriberToggle({
 function ScoreBadge({
   score,
   label,
-  color,
+  tone,
 }: {
   score: number;
   label: string;
-  color: string;
+  tone: "review" | "web";
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="badge-pop" style={{ backgroundColor: color }}>
+      <span className={tone === "review" ? "badge-review" : "badge-web"}>
         {score}/100
       </span>
-      <span className="text-xs font-extrabold text-slate-500">{label}</span>
+      <span
+        className={`text-xs font-semibold ${
+          tone === "review" ? "text-[#6D28D9]" : "text-[#0E7490]"
+        }`}
+      >
+        {label}
+      </span>
     </div>
   );
 }
@@ -1176,15 +1186,24 @@ function MetricBadge({
   label,
   value,
   helper,
+  tone = "neutral",
 }: {
   label: string;
   value: string;
   helper?: string;
+  tone?: "review" | "web" | "neutral";
 }) {
+  const valueClass =
+    tone === "review"
+      ? "text-[#6D28D9]"
+      : tone === "web"
+        ? "text-[#0E7490]"
+        : "text-[#0F172A]";
+
   return (
     <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
       <p className="text-xs font-medium text-[#64748B]">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
+      <p className={`mt-1 text-sm font-semibold ${valueClass}`}>{value}</p>
       {helper ? (
         <p className="mt-1 text-xs text-[#64748B]">{helper}</p>
       ) : null}
@@ -1204,7 +1223,7 @@ function WebsiteStatusBadge({
       className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
         hasWebsite
           ? "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]"
-          : "border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]"
+          : "border-[#FDE68A] bg-[#FFFBEB] text-[#92400E]"
       }`}
     >
       {showLabel ? "Web sitesi: " : ""}

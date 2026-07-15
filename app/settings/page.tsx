@@ -69,12 +69,18 @@ export default function SettingsPage() {
           <StatusCard
             label="Google API"
             value={googleApiLabel}
-            tone={status.googleApiConfigured ? "success" : "warning"}
+            tone={
+              systemStatus
+                ? status.googleApiConfigured
+                  ? "success"
+                  : "warning"
+                : "info"
+            }
           />
           <StatusCard
             label="Veri Kaynağı"
             value={status.googleApiConfigured ? "Google / Demo fallback" : "Demo / Manuel Veri Modu"}
-            tone="neutral"
+            tone={status.googleApiConfigured ? "info" : "neutral"}
           />
           <StatusCard label="Sürüm" value={status.version} tone="neutral" />
         </section>
@@ -142,13 +148,15 @@ function StatusCard({
 }: {
   label: string;
   value: string;
-  tone: "success" | "warning" | "neutral";
+  tone: "success" | "warning" | "info" | "neutral";
 }) {
   const toneClass =
     tone === "success"
       ? "border-green-200 bg-green-50 text-green-700"
       : tone === "warning"
         ? "border-amber-200 bg-amber-50 text-amber-700"
+        : tone === "info"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
         : "border-slate-200 bg-white text-slate-700";
 
   return (

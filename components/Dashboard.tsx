@@ -56,6 +56,18 @@ function getIntentLabel(intent: AnalysisHistoryItem["selectedIntent"]): string {
   return "Genel";
 }
 
+function getIntentBadgeClass(intent: AnalysisHistoryItem["selectedIntent"]): string {
+  if (intent === "review-card") {
+    return "badge-review";
+  }
+
+  if (intent === "web-design") {
+    return "badge-web";
+  }
+
+  return "badge-neutral";
+}
+
 function getAnalysisTitle(analysis: AnalysisHistoryItem): string {
   const fallbackName = [analysis.district, analysis.category]
     .map((value) => value?.trim())
@@ -146,10 +158,38 @@ export default function Dashboard() {
     visibleAnalysisIds.length > 0 && selectedVisibleCount === visibleAnalysisIds.length;
 
   const stats = [
-    { label: "Toplam Analiz", value: history.length },
-    { label: "Toplam İşletme", value: totalBusinesses },
-    { label: "Favoriler", value: favoritesCount },
-    { label: "Yorum Kart Aboneleri", value: subscriberCount },
+    {
+      label: "Toplam Analiz",
+      value: history.length,
+      accent: "border-t-blue-500",
+      valueClass: "metric-blue",
+      markerClass: "bg-blue-50 text-blue-700 border-blue-200",
+      marker: "A",
+    },
+    {
+      label: "Toplam İşletme",
+      value: totalBusinesses,
+      accent: "border-t-cyan-600",
+      valueClass: "metric-cyan",
+      markerClass: "bg-cyan-50 text-cyan-700 border-cyan-200",
+      marker: "İ",
+    },
+    {
+      label: "Favoriler",
+      value: favoritesCount,
+      accent: "border-t-rose-400",
+      valueClass: "text-rose-600",
+      markerClass: "bg-rose-50 text-rose-700 border-rose-200",
+      marker: "F",
+    },
+    {
+      label: "Yorum Kart Aboneleri",
+      value: subscriberCount,
+      accent: "border-t-green-600",
+      valueClass: "metric-green",
+      markerClass: "bg-green-50 text-green-700 border-green-200",
+      marker: "Y",
+    },
   ];
 
   function refreshHistory(nextHistory: AnalysisHistoryItem[]) {
@@ -295,12 +335,22 @@ export default function Dashboard() {
         {stats.map((stat) => (
           <article
             key={stat.label}
-            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+            className={`rounded-xl border border-t-2 border-slate-200 bg-white p-4 shadow-sm ${stat.accent}`}
           >
-            <p className="text-sm font-medium text-slate-500">{stat.label}</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-950">
-              {stat.value}
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+                <p className={`mt-2 text-2xl font-semibold ${stat.valueClass}`}>
+                  {stat.value}
+                </p>
+              </div>
+              <span
+                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold ${stat.markerClass}`}
+                aria-hidden="true"
+              >
+                {stat.marker}
+              </span>
+            </div>
           </article>
         ))}
       </section>
@@ -423,7 +473,7 @@ export default function Dashboard() {
                           </p>
                         </td>
                         <td>
-                          <span className="badge-pop border-blue-100 bg-blue-50 text-blue-700">
+                          <span className={getIntentBadgeClass(analysis.selectedIntent)}>
                             {getIntentLabel(analysis.selectedIntent)}
                           </span>
                         </td>
@@ -496,7 +546,7 @@ export default function Dashboard() {
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                      <span className="badge-pop border-blue-100 bg-blue-50 text-blue-700">
+                      <span className={getIntentBadgeClass(analysis.selectedIntent)}>
                         {getIntentLabel(analysis.selectedIntent)}
                       </span>
                       <span className="badge-pop">{analysis.businesses.length} işletme</span>

@@ -22,12 +22,17 @@ export default function Sidebar() {
       <aside className="hidden border-r border-[#E2E8F0] bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-64 lg:flex-none lg:flex-col lg:self-start lg:overflow-y-auto">
         <Link
           href="/"
-          className="block w-full border-b border-[#E2E8F0] px-5 py-5 transition-colors hover:bg-[#F8FAFC]"
+          className="flex w-full items-center gap-3 border-b border-[#E2E8F0] px-5 py-5 transition-colors hover:bg-[#F8FAFC]"
         >
-          <p className="font-heading text-lg font-semibold tracking-tight text-[#0F172A]">
-            Lead Finder AI
-          </p>
-          <p className="mt-1 text-xs font-medium text-[#64748B]">Satış zekası</p>
+          <span className="h-9 w-9 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF]" />
+          <span>
+            <span className="block font-heading text-lg font-semibold tracking-tight text-[#0F172A]">
+              Lead Finder AI
+            </span>
+            <span className="mt-1 block text-xs font-medium text-[#64748B]">
+              Satış zekası
+            </span>
+          </span>
         </Link>
 
         <nav className="flex w-full flex-col gap-1 px-3 py-4">
@@ -53,12 +58,17 @@ export default function Sidebar() {
       <aside className="border-b border-[#E2E8F0] bg-white px-4 py-4 lg:hidden">
         <Link
           href="/"
-          className="block rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 transition-colors hover:bg-[#F8FAFC]"
+          className="flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 transition-colors hover:bg-[#F8FAFC]"
         >
-          <p className="font-heading text-lg font-semibold tracking-tight text-[#0F172A]">
-            Lead Finder AI
-          </p>
-          <p className="mt-1 text-xs font-medium text-[#64748B]">Satış zekası</p>
+          <span className="h-9 w-9 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF]" />
+          <span>
+            <span className="block font-heading text-lg font-semibold tracking-tight text-[#0F172A]">
+              Lead Finder AI
+            </span>
+            <span className="mt-1 block text-xs font-medium text-[#64748B]">
+              Satış zekası
+            </span>
+          </span>
         </Link>
 
         <nav className="mt-4 flex gap-2 overflow-x-auto pb-1">

@@ -16,14 +16,31 @@
   --primary-hover: #1d4ed8;
   --primary-soft: #eff6ff;
 
+  --review: #7c3aed;
+  --review-text: #6d28d9;
+  --review-soft: #f5f3ff;
+  --review-border: #ddd6fe;
+
+  --web: #0891b2;
+  --web-text: #0e7490;
+  --web-soft: #ecfeff;
+  --web-border: #a5f3fc;
+
   --success: #16a34a;
   --success-soft: #f0fdf4;
+  --success-border: #bbf7d0;
 
   --warning: #d97706;
   --warning-soft: #fffbeb;
+  --warning-border: #fde68a;
 
   --danger: #dc2626;
   --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
+
+  --info: #2563eb;
+  --info-soft: #eff6ff;
+  --info-border: #bfdbfe;
 
   --focus-ring: rgba(37, 99, 235, 0.28);
 
@@ -266,6 +283,104 @@ button:disabled {
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
+  }
+
+  .badge-review,
+  .badge-web,
+  .badge-success,
+  .badge-warning,
+  .badge-danger,
+  .badge-info,
+  .badge-neutral {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .badge-review {
+    border-color: var(--review-border);
+    background: var(--review-soft);
+    color: var(--review-text);
+  }
+
+  .badge-web {
+    border-color: var(--web-border);
+    background: var(--web-soft);
+    color: var(--web-text);
+  }
+
+  .badge-success {
+    border-color: var(--success-border);
+    background: var(--success-soft);
+    color: #166534;
+  }
+
+  .badge-warning {
+    border-color: var(--warning-border);
+    background: var(--warning-soft);
+    color: #92400e;
+  }
+
+  .badge-danger {
+    border-color: var(--danger-border);
+    background: var(--danger-soft);
+    color: #b91c1c;
+  }
+
+  .badge-info {
+    border-color: var(--info-border);
+    background: var(--info-soft);
+    color: var(--info);
+  }
+
+  .badge-neutral {
+    border-color: var(--border);
+    background: #f8fafc;
+    color: #475569;
+  }
+
+  .score-review {
+    border-color: var(--review-border);
+    background: var(--review-soft);
+    color: var(--review-text);
+  }
+
+  .score-web {
+    border-color: var(--web-border);
+    background: var(--web-soft);
+    color: var(--web-text);
+  }
+
+  .metric-blue {
+    color: var(--info);
+  }
+
+  .metric-green {
+    color: var(--success);
+  }
+
+  .metric-amber {
+    color: var(--warning);
+  }
+
+  .metric-red {
+    color: var(--danger);
+  }
+
+  .metric-purple {
+    color: var(--review-text);
+  }
+
+  .metric-cyan {
+    color: var(--web-text);
   }
 
   .page-eyebrow {

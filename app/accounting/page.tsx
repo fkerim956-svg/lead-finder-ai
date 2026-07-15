@@ -1938,7 +1938,7 @@ function InsightsPanel({
 }) {
   if (insights.length === 0) {
     return (
-      <section className="rounded-xl border border-[#E2E8F0] bg-white px-5 py-4">
+      <section className="rounded-xl border border-l-4 border-[#E2E8F0] border-l-[#2563EB] bg-white px-5 py-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-heading text-base font-semibold text-[#0F172A]">
@@ -1955,7 +1955,7 @@ function InsightsPanel({
   }
 
   return (
-    <section className="rounded-xl border border-[#E2E8F0] bg-white">
+    <section className="rounded-xl border border-l-4 border-[#E2E8F0] border-l-[#2563EB] bg-white">
       <button
         type="button"
         onClick={onToggle}
@@ -2034,10 +2034,15 @@ function NfcStockPanel({
         </div>
       </div>
       <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricBadge label="Mevcut Stok" value={`${stock.currentStock} adet`} />
+        <MetricBadge
+          label="Mevcut Stok"
+          value={`${stock.currentStock} adet`}
+          tone={stock.currentStock === 0 ? "red" : isCritical ? "amber" : "green"}
+        />
         <MetricBadge
           label="Kritik Seviye"
           value={`${stock.criticalStockLevel} adet`}
+          tone="amber"
         />
         <MetricBadge
           label="Son Birim Maliyet"
@@ -3025,14 +3030,14 @@ function SummaryCard({
   tone: "blue" | "green" | "amber" | "red";
 }) {
   const toneClass = {
-    blue: "text-[#2563EB]",
-    green: "text-[#16A34A]",
-    amber: "text-[#D97706]",
-    red: "text-[#DC2626]",
+    blue: "border-t-[#2563EB] text-[#2563EB]",
+    green: "border-t-[#16A34A] text-[#16A34A]",
+    amber: "border-t-[#D97706] text-[#D97706]",
+    red: "border-t-[#DC2626] text-[#DC2626]",
   }[tone];
 
   return (
-    <article className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
+    <article className={`rounded-xl border border-t-2 border-[#E2E8F0] bg-white p-4 shadow-sm ${toneClass}`}>
       <p className="text-xs font-medium text-[#64748B]">{label}</p>
       <p className={`mt-2 font-heading text-2xl font-semibold ${toneClass}`}>
         {value}
@@ -3074,11 +3079,27 @@ function ShareCard({
   );
 }
 
-function MetricBadge({ label, value }: { label: string; value: string }) {
+function MetricBadge({
+  label,
+  value,
+  tone = "slate",
+}: {
+  label: string;
+  value: string;
+  tone?: "green" | "amber" | "red" | "blue" | "slate";
+}) {
+  const toneClass = {
+    green: "text-[#16A34A]",
+    amber: "text-[#D97706]",
+    red: "text-[#DC2626]",
+    blue: "text-[#2563EB]",
+    slate: "text-[#0F172A]",
+  }[tone];
+
   return (
     <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
       <p className="text-xs font-medium text-[#64748B]">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
+      <p className={`mt-1 text-sm font-semibold ${toneClass}`}>{value}</p>
     </div>
   );
 }

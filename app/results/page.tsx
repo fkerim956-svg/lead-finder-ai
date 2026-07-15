@@ -612,9 +612,9 @@ export default function ResultsPage() {
             <table className="table-pop w-full table-fixed">
               <thead>
                 <tr>
-                  <th className="w-[34%] text-left">İşletme</th>
+                  <th className="text-left">İşletme</th>
                   {isReviewCardMode ? null : (
-                    <th className="text-left">Web Sitesi</th>
+                    <th className="w-[104px] text-left">Web Sitesi</th>
                   )}
                   <SortableHeader
                     label="Puan"
@@ -647,8 +647,7 @@ export default function ResultsPage() {
                       onSort={handleSort}
                     />
                   )}
-                  {isReviewCardMode ? <th className="text-left">Durum</th> : null}
-                  <th className="w-[18%] text-left">Aksiyonlar</th>
+                  <th className="w-[220px] text-right">Aksiyonlar</th>
                 </tr>
               </thead>
               <tbody>
@@ -670,7 +669,7 @@ export default function ResultsPage() {
                       </td>
                       {isReviewCardMode ? null : (
                         <td>
-                          <StatusBadge active={business.hasWebsite} label="Web" />
+                          <WebsiteStatusBadge hasWebsite={business.hasWebsite} />
                         </td>
                       )}
                       <td className="font-semibold">{business.rating.toFixed(1)}</td>
@@ -690,14 +689,6 @@ export default function ResultsPage() {
                           />
                         )}
                       </td>
-                      {isReviewCardMode ? (
-                        <td>
-                          <StatusBadge
-                            active={isReviewCardSubscriber(business)}
-                            label="Abone"
-                          />
-                        </td>
-                      ) : null}
                       <td>
                         <BusinessActions
                           business={business}
@@ -764,26 +755,11 @@ export default function ResultsPage() {
                         {business.category} • {business.location}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleFavorite(business)}
-                      title={isFavorite(business) ? "Favoriden çıkar" : "Favoriye ekle"}
-                      aria-label={isFavorite(business) ? "Favoriden çıkar" : "Favoriye ekle"}
-                      className="heart-button shrink-0"
-                    >
-                      {isFavorite(business) ? "❤️" : "♡"}
-                    </button>
                   </div>
 
                   {isReviewCardMode ? null : (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <StatusBadge active={business.hasWebsite} label="Web Sitesi" />
-                      <StatusBadge active={business.hasPhone} label="Telefon" />
-                      {!business.hasWebsite ? (
-                            <span className="badge-pop bg-[#FEF2F2] text-[#B91C1C]">
-                          Web sitesi yok
-                        </span>
-                      ) : null}
+                    <div className="mt-4">
+                      <WebsiteStatusBadge hasWebsite={business.hasWebsite} showLabel />
                     </div>
                   )}
 
@@ -805,22 +781,19 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <a
-                      href={getSafeMapsUrl(business)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-3 text-sm font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC]"
-                    >
-                      Google Maps
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedBusiness(business)}
-                      className="btn-secondary min-h-11 flex-1 px-3"
-                    >
-                      Detay
-                    </button>
+                  <div
+                    className={`mt-4 grid gap-2 ${
+                      isReviewCardMode
+                        ? "grid-cols-[44px_44px_44px_1fr]"
+                        : "grid-cols-[44px_44px_1fr]"
+                    }`}
+                  >
+                    <FavoriteToggle
+                      business={business}
+                      isFavorite={isFavorite(business)}
+                      onToggleFavorite={handleToggleFavorite}
+                    />
+                    <MapsIconButton business={business} />
                     {isReviewCardMode ? (
                       <SubscriberToggle
                         business={business}
@@ -828,6 +801,13 @@ export default function ResultsPage() {
                         onToggleSubscriber={handleToggleReviewCardSubscriber}
                       />
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBusiness(business)}
+                      className="btn-secondary min-h-11 px-3 text-sm"
+                    >
+                      Detay
+                    </button>
                   </div>
                 </article>
               );
@@ -1082,31 +1062,13 @@ function BusinessActions({
   onOpenDetail: (business: BusinessResult) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={() => onToggleFavorite(business)}
-        title={isFavorite ? "Favoriden çıkar" : "Favoriye ekle"}
-        aria-label={isFavorite ? "Favoriden çıkar" : "Favoriye ekle"}
-        className="heart-button"
-      >
-        {isFavorite ? "❤️" : "♡"}
-      </button>
-      <a
-        href={getSafeMapsUrl(business)}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC]"
-      >
-        Google Maps
-      </a>
-      <button
-        type="button"
-        onClick={() => onOpenDetail(business)}
-        className="btn-secondary min-h-10 px-3 text-xs"
-      >
-        Detay
-      </button>
+    <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+      <FavoriteToggle
+        business={business}
+        isFavorite={isFavorite}
+        onToggleFavorite={onToggleFavorite}
+      />
+      <MapsIconButton business={business} />
       {isReviewCardMode ? (
         <SubscriberToggle
           business={business}
@@ -1114,7 +1076,55 @@ function BusinessActions({
           onToggleSubscriber={onToggleSubscriber}
         />
       ) : null}
+      <button
+        type="button"
+        onClick={() => onOpenDetail(business)}
+        className="inline-flex h-10 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)]"
+      >
+        Detay
+      </button>
     </div>
+  );
+}
+
+function FavoriteToggle({
+  business,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  business: BusinessResult;
+  isFavorite: boolean;
+  onToggleFavorite: (business: BusinessResult) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggleFavorite(business)}
+      title={isFavorite ? "Favorilerden çıkar" : "Favoriye ekle"}
+      aria-label={isFavorite ? "Favorilerden çıkar" : "Favoriye ekle"}
+      className={`inline-flex h-11 w-11 items-center justify-center rounded-lg border text-lg font-semibold transition focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] md:h-10 md:w-10 ${
+        isFavorite
+          ? "border-[#FCA5A5] bg-[#FEF2F2] text-[#DC2626]"
+          : "border-[#CBD5E1] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+      }`}
+    >
+      {isFavorite ? "❤️" : "♡"}
+    </button>
+  );
+}
+
+function MapsIconButton({ business }: { business: BusinessResult }) {
+  return (
+    <a
+      href={getSafeMapsUrl(business)}
+      target="_blank"
+      rel="noreferrer"
+      title="Google Maps'te aç"
+      aria-label="Google Maps'te aç"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white text-lg text-[#0F172A] transition hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] md:h-10 md:w-10"
+    >
+      <span aria-hidden="true">📍</span>
+    </a>
   );
 }
 
@@ -1137,7 +1147,7 @@ function SubscriberToggle({
           : "Yorum Kart abonesi yap"
       }
       title={isSubscriber ? "Abone — çıkarmak için tıkla" : "Abone yap"}
-      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border text-lg font-bold transition focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#16A34A] ${
+      className={`inline-flex h-11 w-11 items-center justify-center rounded-lg border text-lg font-bold transition focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#16A34A] md:h-10 md:w-10 ${
         isSubscriber
           ? "border-[#16A34A] bg-[#16A34A] text-white hover:bg-[#15803D]"
           : "border-[#16A34A] bg-[#F0FDF4] text-[#16A34A] hover:bg-[#DCFCE7]"
@@ -1187,11 +1197,23 @@ function MetricBadge({
   );
 }
 
-function StatusBadge({ active, label }: { active: boolean; label?: string }) {
+function WebsiteStatusBadge({
+  hasWebsite,
+  showLabel = false,
+}: {
+  hasWebsite: boolean;
+  showLabel?: boolean;
+}) {
   return (
-    <span className={`badge-pop ${active ? "bg-[#F0FDF4] text-[#166534]" : "bg-[#F1F5F9] text-[#475569]"}`}>
-      {label ? `${label}: ` : ""}
-      {active ? "Var" : "Yok"}
+    <span
+      className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+        hasWebsite
+          ? "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]"
+          : "border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]"
+      }`}
+    >
+      {showLabel ? "Web sitesi: " : ""}
+      {hasWebsite ? "Var" : "Yok"}
     </span>
   );
 }

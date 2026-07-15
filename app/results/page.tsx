@@ -12,13 +12,7 @@ import { createMapsSearchUrl } from "@/lib/business-normalization";
 import { calculateLeadScore } from "@/lib/lead-score";
 import {
   calculateReviewCardScore,
-  getReviewCardCandidateReasons,
   getReviewCardFitLabel,
-  getReviewCardRiskLevel,
-  getReviewCardSalesAngle,
-  getReviewCardSectorLabel,
-  getReviewCardSectorSalesAngle,
-  getReviewCardSectorType,
 } from "@/lib/review-card-score";
 import {
   FAVORITES_STORAGE_KEY,
@@ -260,7 +254,6 @@ export default function ResultsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessResult | null>(null);
-  const [openActionMenuKey, setOpenActionMenuKey] = useState<string | null>(null);
   const isReviewCardMode = selectedIntent === "review-card";
 
   const pageContent = isReviewCardMode
@@ -451,22 +444,6 @@ export default function ResultsPage() {
       REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY,
       JSON.stringify(updatedSubscribers),
     );
-  }
-
-  function getLeadScoreExplanation(leadScore: number): string {
-    if (leadScore >= 85) {
-      return "Çok yüksek potansiyel";
-    }
-
-    if (leadScore >= 70) {
-      return "Yüksek potansiyel";
-    }
-
-    if (leadScore >= 50) {
-      return "Orta potansiyel";
-    }
-
-    return "Düşük potansiyel";
   }
 
   const currentAnalysisMetaLine = latestAnalysis
@@ -724,14 +701,12 @@ export default function ResultsPage() {
                       <td>
                         <BusinessActions
                           business={business}
-                          intent={selectedIntent}
                           isFavorite={isFavorite(business)}
                           isSubscriber={isReviewCardSubscriber(business)}
+                          isReviewCardMode={isReviewCardMode}
                           onToggleFavorite={handleToggleFavorite}
-                          onAddSubscriber={handleToggleReviewCardSubscriber}
+                          onToggleSubscriber={handleToggleReviewCardSubscriber}
                           onOpenDetail={setSelectedBusiness}
-                          openMenuKey={openActionMenuKey}
-                          onToggleMenu={setOpenActionMenuKey}
                         />
                       </td>
                     </tr>
@@ -819,7 +794,7 @@ export default function ResultsPage() {
                       <MetricBadge
                         label="Yorum Kart"
                         value={`${reviewCardScore}/100`}
-                        helper={getReviewCardRiskLevel(reviewCardScore)}
+                        helper={getReviewCardFitLabel(reviewCardScore)}
                       />
                     ) : (
                       <MetricBadge
@@ -830,22 +805,29 @@ export default function ResultsPage() {
                     )}
                   </div>
 
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <a
+                      href={getSafeMapsUrl(business)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-3 text-sm font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC]"
+                    >
+                      Google Maps
+                    </a>
                     <button
                       type="button"
                       onClick={() => setSelectedBusiness(business)}
-                      className="btn-primary flex-1"
+                      className="btn-secondary min-h-11 flex-1 px-3"
                     >
                       Detay
                     </button>
-                    <ResultsActionMenu
-                      business={business}
-                      intent={selectedIntent}
-                      isSubscriber={isReviewCardSubscriber(business)}
-                      openMenuKey={openActionMenuKey}
-                      onToggleMenu={setOpenActionMenuKey}
-                      onToggleSubscriber={handleToggleReviewCardSubscriber}
-                    />
+                    {isReviewCardMode ? (
+                      <SubscriberToggle
+                        business={business}
+                        isSubscriber={isReviewCardSubscriber(business)}
+                        onToggleSubscriber={handleToggleReviewCardSubscriber}
+                      />
+                    ) : null}
                   </div>
                 </article>
               );
@@ -863,7 +845,6 @@ export default function ResultsPage() {
           onToggleFavorite={handleToggleFavorite}
           onToggleSubscriber={handleToggleReviewCardSubscriber}
           onClose={() => setSelectedBusiness(null)}
-          leadExplanation={getLeadScoreExplanation(selectedBusiness.leadScore)}
         />
       ) : null}
     </AppShell>
@@ -898,7 +879,6 @@ function BusinessDetailModal({
   onToggleFavorite,
   onToggleSubscriber,
   onClose,
-  leadExplanation,
 }: {
   business: BusinessResult;
   intent: SelectedIntent;
@@ -907,16 +887,10 @@ function BusinessDetailModal({
   onToggleFavorite: (business: BusinessResult) => void;
   onToggleSubscriber: (business: BusinessResult) => void;
   onClose: () => void;
-  leadExplanation: string;
 }) {
   const isReviewCardMode = intent === "review-card";
   const reviewCardScore = getReviewCardScore(business);
   const webDesignScore = getWebScore(business);
-  const reviewCardReasons = getReviewCardCandidateReasons(business);
-  const reviewCardSalesAngle = getReviewCardSalesAngle(business);
-  const reviewCardSector = getReviewCardSectorType(business.category);
-  const reviewCardSectorLabel = getReviewCardSectorLabel(reviewCardSector);
-  const reviewCardSectorSalesAngle = getReviewCardSectorSalesAngle(business);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
@@ -930,9 +904,7 @@ function BusinessDetailModal({
               {business.businessName}
             </h2>
             <p className="mt-2 text-sm font-medium text-[#64748B]">
-              {isReviewCardMode
-                ? "Yorum ve güven artırma hizmetleri için değerlendirilebilir."
-                : "Web sitesi ve dijital vitrin teklifi için değerlendirilebilir."}
+              {business.category} • {business.location}
             </p>
           </div>
           <button type="button" onClick={onClose} className="btn-secondary min-h-10 px-4">
@@ -950,8 +922,6 @@ function BusinessDetailModal({
             value={business.hasWebsite ? "Var" : "Web sitesi yok"}
           />
           <DetailItem label="Telefon" value={business.hasPhone ? "Var" : "Yok"} />
-          <DetailItem label="Fırsat Skoru" value={`⭐ ${business.leadScore}/100`} />
-          <DetailItem label="Potansiyel" value={leadExplanation} />
           {isReviewCardMode ? (
             <>
               <DetailItem
@@ -960,84 +930,41 @@ function BusinessDetailModal({
                   reviewCardScore,
                 )}`}
               />
+              <DetailItem label="Genel Fırsat Skoru" value={`⭐ ${business.leadScore}/100`} />
               <DetailItem
                 label="Yorum Kart Aboneliği"
                 value={isSubscriber ? "Abone" : "Abone değil"}
               />
+              <DetailItem
+                label="Favori Durumu"
+                value={isFavorite ? "Favoride" : "Favoride değil"}
+              />
             </>
           ) : (
-            <DetailItem
-              label="Web Tasarım Skoru"
-              value={`${webDesignScore}/100 - ${getWebDesignFitLabel(
-                webDesignScore,
-              )}`}
-            />
+            <>
+              <DetailItem
+                label="Web Tasarım Skoru"
+                value={`${webDesignScore}/100 - ${getWebDesignFitLabel(
+                  webDesignScore,
+                )}`}
+              />
+              <DetailItem label="Genel Fırsat Skoru" value={`⭐ ${business.leadScore}/100`} />
+              <DetailItem
+                label="Favori Durumu"
+                value={isFavorite ? "Favoride" : "Favoride değil"}
+              />
+            </>
           )}
         </div>
-
-        {isReviewCardMode ? (
-        <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] p-5">
-            <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-heading text-2xl font-black text-[#1E293B]">
-                    Yorum Kart Aday Analizi
-                  </h3>
-                  <p className="mt-1 text-sm font-bold text-slate-600">
-                    Bu işletmenin Yorum Kart satışı açısından neden uygun
-                    olduğunu hızlıca değerlendir.
-                  </p>
-                </div>
-                <span className="badge-pop bg-[#EDE9FE]">
-                  {reviewCardScore}/100 · {getReviewCardRiskLevel(reviewCardScore)}
-                </span>
-              </div>
-
-              <ul className="mt-4 grid gap-2">
-                {reviewCardReasons.map((reason) => (
-                  <li
-                    key={reason}
-                    className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3 text-sm font-medium text-[#0F172A]"
-                  >
-                    {reason}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-4 rounded-lg border border-[#E2E8F0] bg-[#FFFBEB] p-4">
-                <p className="text-sm font-black text-[#1E293B]">
-                  Bu işletmeye nasıl yaklaşılır?
-                </p>
-                <p className="mt-2 text-sm font-bold leading-6 text-[#1E293B]">
-                  {reviewCardSalesAngle}
-                </p>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-black text-[#1E293B]">
-                    Sektöre Göre Satış Açısı
-                  </p>
-                  <span className="badge-pop bg-white">
-                    {reviewCardSectorLabel}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm font-bold leading-6 text-[#1E293B]">
-                  {reviewCardSectorSalesAngle}
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         <div className="flex flex-col gap-3 border-t border-[#E2E8F0] px-5 py-4 sm:flex-row sm:justify-end">
           <a
             href={getSafeMapsUrl(business)}
             target="_blank"
             rel="noreferrer"
-            className="btn-primary"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-4 text-sm font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC]"
           >
-            Google Maps’te Aç
+            Google Maps
           </a>
           <button
             type="button"
@@ -1049,13 +976,11 @@ function BusinessDetailModal({
             {isFavorite ? "❤️" : "♡"}
           </button>
           {isReviewCardMode ? (
-            <button
-              type="button"
-              onClick={() => onToggleSubscriber(business)}
-              className="btn-secondary"
-            >
-              {isSubscriber ? "Abonelikten Çıkar" : "Yorum Kart Abonesi"}
-            </button>
+            <SubscriberToggle
+              business={business}
+              isSubscriber={isSubscriber}
+              onToggleSubscriber={onToggleSubscriber}
+            />
           ) : null}
           <button type="button" onClick={onClose} className="btn-secondary">
             Kapat
@@ -1141,27 +1066,23 @@ function DetailItem({ label, value }: { label: string; value: string }) {
 
 function BusinessActions({
   business,
-  intent,
   isFavorite,
   isSubscriber,
+  isReviewCardMode,
   onToggleFavorite,
-  onAddSubscriber,
+  onToggleSubscriber,
   onOpenDetail,
-  openMenuKey,
-  onToggleMenu,
 }: {
   business: BusinessResult;
-  intent: SelectedIntent;
   isFavorite: boolean;
   isSubscriber: boolean;
+  isReviewCardMode: boolean;
   onToggleFavorite: (business: BusinessResult) => void;
-  onAddSubscriber: (business: BusinessResult) => void;
+  onToggleSubscriber: (business: BusinessResult) => void;
   onOpenDetail: (business: BusinessResult) => void;
-  openMenuKey: string | null;
-  onToggleMenu: (key: string | null) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
         onClick={() => onToggleFavorite(business)}
@@ -1171,6 +1092,14 @@ function BusinessActions({
       >
         {isFavorite ? "❤️" : "♡"}
       </button>
+      <a
+        href={getSafeMapsUrl(business)}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#0F172A] transition hover:bg-[#F8FAFC]"
+      >
+        Google Maps
+      </a>
       <button
         type="button"
         onClick={() => onOpenDetail(business)}
@@ -1178,82 +1107,44 @@ function BusinessActions({
       >
         Detay
       </button>
-      <ResultsActionMenu
-        business={business}
-        intent={intent}
-        isSubscriber={isSubscriber}
-        openMenuKey={openMenuKey}
-        onToggleMenu={onToggleMenu}
-        onToggleSubscriber={onAddSubscriber}
-      />
+      {isReviewCardMode ? (
+        <SubscriberToggle
+          business={business}
+          isSubscriber={isSubscriber}
+          onToggleSubscriber={onToggleSubscriber}
+        />
+      ) : null}
     </div>
   );
 }
 
-function ResultsActionMenu({
+function SubscriberToggle({
   business,
-  intent,
   isSubscriber,
-  openMenuKey,
-  onToggleMenu,
   onToggleSubscriber,
 }: {
   business: BusinessResult;
-  intent: SelectedIntent;
   isSubscriber: boolean;
-  openMenuKey: string | null;
-  onToggleMenu: (key: string | null) => void;
   onToggleSubscriber: (business: BusinessResult) => void;
 }) {
-  const menuKey = getBusinessKey(business);
-  const isOpen = openMenuKey === menuKey;
-
-  function closeMenu() {
-    onToggleMenu(null);
-  }
-
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => onToggleMenu(isOpen ? null : menuKey)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            closeMenu();
-          }
-        }}
-        aria-label="İşletme işlemleri"
-        aria-expanded={isOpen}
-        className="btn-ghost min-h-10 px-3"
-      >
-        İşlemler
-      </button>
-      {isOpen ? (
-        <div className="absolute right-0 z-30 mt-2 w-56 rounded-lg border border-[#E2E8F0] bg-white p-1 shadow-lg">
-          <a
-            href={getSafeMapsUrl(business)}
-            target="_blank"
-            rel="noreferrer"
-            onClick={closeMenu}
-            className="block rounded-md px-3 py-2 text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9]"
-          >
-            Google Maps
-          </a>
-          {intent === "review-card" ? (
-            <button
-              type="button"
-              onClick={() => {
-                onToggleSubscriber(business);
-                closeMenu();
-              }}
-              className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-[#0F172A] hover:bg-[#F1F5F9]"
-            >
-              {isSubscriber ? "Abonelikten Çıkar" : "Yorum Kart Abonesi"}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <button
+      type="button"
+      onClick={() => onToggleSubscriber(business)}
+      aria-label={
+        isSubscriber
+          ? "Yorum Kart aboneliğinden çıkar"
+          : "Yorum Kart abonesi yap"
+      }
+      title={isSubscriber ? "Abone — çıkarmak için tıkla" : "Abone yap"}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border text-lg font-bold transition focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#16A34A] ${
+        isSubscriber
+          ? "border-[#16A34A] bg-[#16A34A] text-white hover:bg-[#15803D]"
+          : "border-[#16A34A] bg-[#F0FDF4] text-[#16A34A] hover:bg-[#DCFCE7]"
+      }`}
+    >
+      ✓
+    </button>
   );
 }
 

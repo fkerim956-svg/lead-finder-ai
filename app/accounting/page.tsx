@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import {
   ACCOUNTING_RECORDS_STORAGE_KEY,
@@ -655,16 +655,16 @@ function getStatusLabel(status: SubscriptionStatus): string {
   return "Aktif";
 }
 
-function getStatusColor(status: SubscriptionStatus): string {
+function getStatusTone(status: SubscriptionStatus): "green" | "blue" | "red" {
   if (status === "cancelled") {
-    return "#FCA5A5";
+    return "red";
   }
 
   if (status === "completed") {
-    return "#DBEAFE";
+    return "blue";
   }
 
-  return "#34D399";
+  return "green";
 }
 
 function createAccountingInsights(
@@ -760,13 +760,15 @@ function createAccountingInsights(
 }
 
 export default function AccountingPage() {
-  const [records, setRecords] = useState<AccountingRecord[]>(getInitialRecords);
-  const [subscribers] = useState<ReviewCardSubscriber[]>(getInitialSubscribers);
-  const [nfcStock, setNfcStock] = useState<NfcStockData>(getInitialNfcStock);
+  const [records, setRecords] = useState<AccountingRecord[]>([]);
+  const [subscribers, setSubscribers] = useState<ReviewCardSubscriber[]>([]);
+  const [nfcStock, setNfcStock] = useState<NfcStockData>(defaultNfcStock);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [isOneTimeModalOpen, setIsOneTimeModalOpen] = useState(false);
   const [isStockAddModalOpen, setIsStockAddModalOpen] = useState(false);
   const [isStockAdjustModalOpen, setIsStockAdjustModalOpen] = useState(false);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [isStockMovementsOpen, setIsStockMovementsOpen] = useState(false);
   const [selectedDetailRecord, setSelectedDetailRecord] =
     useState<NormalizedAccountingRecord | null>(null);
   const [selectedEditRecord, setSelectedEditRecord] =
@@ -787,6 +789,16 @@ export default function AccountingPage() {
   const [stockFormError, setStockFormError] = useState("");
   const currentMonthKey = getCurrentMonthKey();
   const currentMonthLabel = getMonthLabel(currentMonthKey);
+
+  useEffect(() => {
+    const loadStoredAccountingData = window.setTimeout(() => {
+      setRecords(getInitialRecords());
+      setSubscribers(getInitialSubscribers());
+      setNfcStock(getInitialNfcStock());
+    }, 0);
+
+    return () => window.clearTimeout(loadStoredAccountingData);
+  }, []);
 
   const normalizedRecords = useMemo(
     () => records.map(normalizeAccountingRecord),
@@ -1563,187 +1575,205 @@ export default function AccountingPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-7 px-5 py-8 sm:px-6 lg:py-10">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
         <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
           <div>
             <p className="page-eyebrow">Yorum Kart</p>
-            <h1 className="page-title mt-5">Muhasebe</h1>
-            <p className="muted-text mt-4 max-w-3xl text-base font-medium leading-7">
-              Aylık abonelikleri, tek seferlik satışları, kârlılığı ve ortak
-              paylarını sade bir panelde takip edin.
+            <h1 className="page-title mt-4">Muhasebe</h1>
+            <p className="muted-text mt-3 max-w-3xl text-base leading-7">
+              Abonelikleri, tahsilatları, satışları, giderleri ve NFC kart stoğunu yönetin.
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
-            <button
-              type="button"
-              onClick={handleOpenSubscriptionModal}
-              className="btn-primary w-fit"
-            >
-              Abonelik Kaydı Ekle
-            </button>
+          <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
             <button
               type="button"
               onClick={handleOpenOneTimeModal}
-              className="btn-secondary w-fit"
+              className="btn-primary w-full sm:w-auto"
             >
-              Tek Seferlik Satış Ekle
+              Yeni Satış
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenSubscriptionModal}
+              className="btn-secondary w-full sm:w-auto"
+            >
+              Abonelik Ekle
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadCsv}
+              disabled={records.length === 0}
+              className="btn-ghost w-full sm:w-auto"
+            >
+              CSV İndir
             </button>
           </div>
         </header>
 
         <section>
-          <h2 className="font-heading text-2xl font-black text-[#1E293B]">
+          <h2 className="font-heading text-xl font-semibold text-[#0F172A]">
             Bu Ayın Özeti
           </h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
               label="Bu Ay Beklenen"
               value={formatCurrency(totals.expectedThisMonth)}
-              color="#FBBF24"
+              tone="blue"
             />
             <SummaryCard
               label="Bu Ay Alınan"
               value={formatCurrency(totals.receivedThisMonth)}
-              color="#34D399"
+              tone="green"
             />
             <SummaryCard
               label="Bu Ay Kalan"
               value={formatCurrency(totals.remainingThisMonth)}
-              color="#8B5CF6"
+              tone="amber"
             />
             <SummaryCard
               label="Bu Ay Gider"
               value={formatCurrency(totals.expenseThisMonth)}
-              color="#F472B6"
+              tone="red"
             />
           </div>
         </section>
 
-        <NfcStockPanel
-          stock={nfcStock}
-          onOpenAdd={handleOpenStockAddModal}
-          onOpenAdjust={handleOpenStockAdjustModal}
+        <InsightsPanel
+          insights={accountingInsights.slice(0, 3)}
+          isOpen={isInsightsOpen}
+          onToggle={() => setIsInsightsOpen((current) => !current)}
         />
 
-        <StockMovementsPanel movements={nfcStock.movements.slice(0, 8)} />
-
-        <section className="card-pop overflow-hidden">
-          <div className="border-b-2 border-[#1E293B] bg-[#EDE9FE] px-5 py-4">
-            <h2 className="font-heading text-2xl font-black text-[#1E293B]">
-              AI Muhasebe Önerileri
-            </h2>
-            <p className="mt-1 text-sm font-bold text-slate-600">
-              Şimdilik API kullanmadan, mevcut kayıtlardan kural bazlı öneriler.
-            </p>
-          </div>
-          <div className="grid gap-3 p-4">
-            {accountingInsights.length === 0 ? (
-              <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
-                Yeterli muhasebe verisi oluşunca burada akıllı öneriler görünecek.
-              </p>
-            ) : (
-              accountingInsights.map((insight) => (
-                <p
-                  key={insight}
-                  className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]"
-                >
-                  {insight}
-                </p>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="card-pop overflow-hidden">
-          <div className="border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4">
-            <h2 className="font-heading text-2xl font-black text-[#1E293B]">
-              Bu Ay Tahsil Edilecekler
-            </h2>
-            <p className="mt-1 text-sm font-bold text-[#1E293B]">
-              {currentMonthLabel} için aktif aboneliklerin aylık ödemeleri.
-            </p>
-          </div>
+        <section className="card-pop overflow-visible">
+          <SectionHeader
+            title="Bu Ay Tahsil Edilecekler"
+            subtitle={`${currentMonthLabel} için aktif aboneliklerin aylık ödemeleri`}
+          />
 
           {currentMonthDues.length === 0 ? (
-            <EmptyBox text="Bu ay tahsil edilecek aktif abonelik yok." />
+            <EmptyBox text="Bu ay tahsil edilecek ödeme bulunmuyor." />
           ) : (
-            <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
-              {currentMonthDues.map(({ record, payment }) => (
-                <article
-                  key={record.id}
-                  className="rounded-[20px] border-2 border-[#1E293B] bg-white p-4 shadow-[3px_3px_0_#1E293B]"
-                >
-                  <div className="flex flex-col gap-3">
+            <>
+              <div className="hidden md:block">
+                <table className="w-full table-fixed text-left text-sm">
+                  <thead className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-xs font-semibold text-[#64748B]">
+                    <tr>
+                      <th className="w-[30%] px-4 py-3">İşletme</th>
+                      <th className="px-4 py-3">Ödeme Türü</th>
+                      <th className="px-4 py-3">Tutar</th>
+                      <th className="px-4 py-3">Son/Dönem Bilgisi</th>
+                      <th className="px-4 py-3">Durum</th>
+                      <th className="px-4 py-3 text-right">Aksiyonlar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E2E8F0]">
+                    {currentMonthDues.map(({ record, payment }) => (
+                      <tr
+                        key={record.id}
+                        className={payment.isPaid ? "bg-[#F8FAFC]" : "bg-white"}
+                      >
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-[#0F172A]">
+                            {record.businessName}
+                          </p>
+                          <p className="mt-1 truncate text-xs text-[#64748B]">
+                            {record.location}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-[#475569]">
+                          Aylık Abonelik
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-[#0F172A]">
+                          {formatCurrency(record.monthlyFee)}
+                        </td>
+                        <td className="px-4 py-3 text-[#475569]">
+                          {currentMonthLabel}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Pill
+                            label={payment.isPaid ? "Ödendi" : "Bekliyor"}
+                            tone={payment.isPaid ? "green" : "amber"}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleCurrentMonthPayment(record.id)
+                              }
+                              className={
+                                payment.isPaid
+                                  ? "btn-ghost min-h-10 px-3 text-xs"
+                                  : "btn-primary min-h-10 px-3 text-xs"
+                              }
+                            >
+                              {payment.isPaid ? "Geri Al" : "Ödeme Alındı"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid gap-3 p-4 md:hidden">
+                {currentMonthDues.map(({ record, payment }) => (
+                  <article key={record.id} className="compact-row">
                     <div>
-                      <h3 className="font-heading text-lg font-black text-[#1E293B]">
+                      <p className="font-semibold text-[#0F172A]">
                         {record.businessName}
-                      </h3>
-                      <p className="mt-1 text-xs font-black text-slate-500">
-                        {record.packageName} • {currentMonthLabel}
+                      </p>
+                      <p className="mt-1 text-sm text-[#64748B]">
+                        Aylık Abonelik • {currentMonthLabel}
                       </p>
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-heading text-2xl font-black text-[#1E293B]">
-                          {formatCurrency(record.monthlyFee)}
-                        </p>
-                        <p className="text-xs font-black text-slate-500">
-                          {payment.isPaid ? "Ödeme alındı" : "Bekliyor"}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleCurrentMonthPayment(record.id)}
-                        className={
-                          payment.isPaid
-                            ? "btn-secondary min-h-11 px-4 text-xs"
-                            : "btn-primary min-h-11 px-4 text-xs"
-                        }
-                      >
-                        {payment.isPaid ? "Geri Al" : "Ödeme Alındı"}
-                      </button>
+                    <div className="grid grid-cols-2 gap-3">
+                      <MiniMetric label="Tutar" value={formatCurrency(record.monthlyFee)} />
+                      <MiniMetric
+                        label="Durum"
+                        value={payment.isPaid ? "Ödendi" : "Bekliyor"}
+                      />
                     </div>
-                  </div>
-                </article>
-              ))}
-            </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleCurrentMonthPayment(record.id)}
+                      className={payment.isPaid ? "btn-ghost" : "btn-primary"}
+                    >
+                      {payment.isPaid ? "Geri Al" : "Ödeme Alındı"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </>
           )}
         </section>
 
-        <section className="card-pop overflow-hidden">
+        <section className="card-pop overflow-visible">
           <SectionHeader
             title="Aylık Abonelikler"
             subtitle={`${subscriptionRecords.length} abonelik kaydı`}
-            action={
-              <button
-                type="button"
-                onClick={handleDownloadCsv}
-                disabled={records.length === 0}
-                className="btn-secondary"
-              >
-                Muhasebe CSV İndir
-              </button>
-            }
           />
 
           {subscriptionRecords.length === 0 ? (
             <EmptyBox text="Henüz aylık abonelik kaydı yok." />
           ) : (
-            <div className="grid gap-3 p-4 md:grid-cols-2">
+            <div className="divide-y divide-[#E2E8F0]">
               {subscriptionRecords.map((record) => (
                 <SubscriptionListItem
                   key={record.id}
                   record={record}
+                  currentMonthKey={currentMonthKey}
                   onOpenDetail={setSelectedDetailRecord}
                   onOpenEdit={handleOpenEditSubscriptionModal}
-                  onDelete={handleDeleteRecord}
                 />
               ))}
             </div>
           )}
         </section>
 
-        <section className="card-pop overflow-hidden">
+        <section className="card-pop overflow-visible">
           <SectionHeader
             title="Tek Seferlik Satışlar"
             subtitle={`${oneTimeRecords.length} satış kaydı`}
@@ -1752,50 +1782,62 @@ export default function AccountingPage() {
           {oneTimeRecords.length === 0 ? (
             <EmptyBox text="Henüz tek seferlik satış kaydı yok." />
           ) : (
-            <div className="grid gap-3 p-4 md:grid-cols-2">
+            <div className="divide-y divide-[#E2E8F0]">
               {oneTimeRecords.map((record) => (
                 <OneTimeListItem
                   key={record.id}
                   record={record}
                   onOpenDetail={setSelectedDetailRecord}
-                  onDelete={handleDeleteRecord}
                 />
               ))}
             </div>
           )}
         </section>
 
+        <NfcStockPanel
+          stock={nfcStock}
+          movements={nfcStock.movements.slice(0, 8)}
+          isMovementsOpen={isStockMovementsOpen}
+          onToggleMovements={() =>
+            setIsStockMovementsOpen((current) => !current)
+          }
+          onOpenAdd={handleOpenStockAddModal}
+          onOpenAdjust={handleOpenStockAdjustModal}
+        />
+
         <section className="card-pop p-5">
           <div>
-            <h2 className="font-heading text-2xl font-black text-[#1E293B]">
+            <h2 className="font-heading text-xl font-semibold text-[#0F172A]">
               Bu Ay Ortak Payı
             </h2>
-            <p className="mt-2 text-sm font-bold text-slate-600">
-              Tek seferlik satışlar bu ay alınan tutara eklenir. Giderler 1.
-              kişinin payından düşülür.
+            <p className="mt-2 text-sm text-[#64748B]">
+              Giderler yalnızca %70 paydan düşülür.
             </p>
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
             <ShareCard
-              label="1. Kişi (%70 - giderler)"
+              label="1. Ortak"
+              percentage="%70"
               value={formatCurrency(totals.partner1ThisMonth)}
-              color="#8B5CF6"
+              helper="Giderler yalnızca bu paydan düşülür."
+              tone="blue"
             />
             <ShareCard
-              label="2. Kişi (%20)"
+              label="2. Ortak"
+              percentage="%20"
               value={formatCurrency(totals.partner2ThisMonth)}
-              color="#34D399"
+              tone="green"
             />
             <ShareCard
-              label="3. Kişi (%10)"
+              label="3. Ortak"
+              percentage="%10"
               value={formatCurrency(totals.partner3ThisMonth)}
-              color="#F472B6"
+              tone="slate"
             />
           </div>
         </section>
       </div>
-
       {isSubscriptionModalOpen ? (
         <SubscriptionRecordModal
           subscribers={availableSubscribers}
@@ -1877,6 +1919,7 @@ export default function AccountingPage() {
           record={selectedDetailRecord}
           currentMonthKey={currentMonthKey}
           onOpenEdit={handleOpenEditSubscriptionModal}
+          onDelete={handleDeleteRecord}
           onClose={() => setSelectedDetailRecord(null)}
         />
       ) : null}
@@ -1884,12 +1927,84 @@ export default function AccountingPage() {
   );
 }
 
+function InsightsPanel({
+  insights,
+  isOpen,
+  onToggle,
+}: {
+  insights: string[];
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  if (insights.length === 0) {
+    return (
+      <section className="rounded-xl border border-[#E2E8F0] bg-white px-5 py-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-heading text-base font-semibold text-[#0F172A]">
+              AI Muhasebe Önerileri
+            </h2>
+            <p className="mt-1 text-sm text-[#64748B]">
+              Yeterli muhasebe verisi oluşunca burada kısa öneriler görünecek.
+            </p>
+          </div>
+          <Pill label="0 öneri" tone="slate" />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border border-[#E2E8F0] bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full flex-col gap-3 px-5 py-4 text-left sm:flex-row sm:items-center sm:justify-between"
+        aria-expanded={isOpen}
+      >
+        <span>
+          <span className="block font-heading text-base font-semibold text-[#0F172A]">
+            AI Muhasebe Önerileri
+          </span>
+          <span className="mt-1 block text-sm text-[#64748B]">
+            {insights.length} öneri • API kullanmadan kural bazlı oluşturuldu.
+          </span>
+        </span>
+        <span className="btn-ghost pointer-events-none min-h-10 px-3 text-xs">
+          {isOpen ? "Gizle" : "Önerileri Göster"}
+        </span>
+      </button>
+
+      {isOpen ? (
+        <div className="grid gap-2 border-t border-[#E2E8F0] p-4">
+          {insights.map((insight) => (
+            <div
+              key={insight}
+              className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3"
+            >
+              <p className="text-sm font-medium leading-6 text-[#334155]">
+                {insight}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function NfcStockPanel({
   stock,
+  movements,
+  isMovementsOpen,
+  onToggleMovements,
   onOpenAdd,
   onOpenAdjust,
 }: {
   stock: NfcStockData;
+  movements: NfcStockMovement[];
+  isMovementsOpen: boolean;
+  onToggleMovements: () => void;
   onOpenAdd: () => void;
   onOpenAdjust: () => void;
 }) {
@@ -1897,12 +2012,12 @@ function NfcStockPanel({
 
   return (
     <section className="card-pop overflow-hidden">
-      <div className="flex flex-col gap-4 border-b-2 border-[#1E293B] bg-[#34D399] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-4 border-b border-[#E2E8F0] bg-white px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="font-heading text-2xl font-black text-[#1E293B]">
+          <h2 className="font-heading text-xl font-semibold text-[#0F172A]">
             NFC Kart Stoğu
           </h2>
-          <p className="mt-1 text-sm font-bold text-[#1E293B]">
+          <p className="mt-1 text-sm text-[#64748B]">
             Satış kayıtlarında kullanılan kart adedi stoktan otomatik düşer.
           </p>
         </div>
@@ -1911,26 +2026,34 @@ function NfcStockPanel({
             Stok Ekle
           </button>
           <button type="button" onClick={onOpenAdjust} className="btn-secondary">
-            Stok Düzelt
+            Stok Kullan / Düzelt
+          </button>
+          <button type="button" onClick={onToggleMovements} className="btn-ghost">
+            {isMovementsOpen ? "Hareketleri Gizle" : "Hareketleri Gör"}
           </button>
         </div>
       </div>
-      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
         <MetricBadge label="Mevcut Stok" value={`${stock.currentStock} adet`} />
-        <MetricBadge label="Toplam Eklenen" value={`${stock.totalAdded} adet`} />
-        <MetricBadge label="Toplam Kullanılan" value={`${stock.totalUsed} adet`} />
         <MetricBadge
           label="Kritik Seviye"
           value={`${stock.criticalStockLevel} adet`}
         />
+        <MetricBadge
+          label="Son Birim Maliyet"
+          value={formatCurrency(stock.lastUnitCost)}
+        />
+        <MetricBadge label="Toplam Eklenen" value={`${stock.totalAdded} adet`} />
+        <MetricBadge label="Toplam Kullanılan" value={`${stock.totalUsed} adet`} />
       </div>
       {isCritical ? (
         <div className="px-4 pb-4">
-          <p className="rounded-2xl border-2 border-[#1E293B] bg-[#F472B6] p-3 text-sm font-black text-[#1E293B]">
+          <p className="rounded-lg border border-[#F59E0B] bg-[#FFFBEB] p-3 text-sm font-semibold text-[#92400E]">
             NFC kart stoğu kritik seviyede.
           </p>
         </div>
       ) : null}
+      {isMovementsOpen ? <StockMovementsPanel movements={movements} /> : null}
     </section>
   );
 }
@@ -1941,37 +2064,36 @@ function StockMovementsPanel({
   movements: NfcStockMovement[];
 }) {
   return (
-    <section className="card-pop overflow-hidden">
-      <div className="border-b-2 border-[#1E293B] bg-[#FFFDF5] px-5 py-4">
-        <h2 className="font-heading text-xl font-black text-[#1E293B]">
+    <div className="border-t border-[#E2E8F0]">
+      <div className="px-5 py-4">
+        <h3 className="font-heading text-base font-semibold text-[#0F172A]">
           Son Stok Hareketleri
-        </h2>
+        </h3>
       </div>
       {movements.length === 0 ? (
-        <EmptyBox text="Henüz stok hareketi yok." />
+        <EmptyBox text="Henüz stok hareketi bulunmuyor." />
       ) : (
         <div className="grid gap-2 p-4">
           {movements.map((movement) => (
             <div
               key={movement.id}
-              className="grid gap-2 rounded-2xl border-2 border-[#1E293B] bg-white p-3 text-sm font-bold text-[#1E293B] md:grid-cols-[1fr_1fr_auto_1.5fr] md:items-center"
+              className="grid gap-2 rounded-lg border border-[#E2E8F0] bg-white p-3 text-sm text-[#334155] md:grid-cols-[1fr_1fr_auto_1.5fr] md:items-center"
             >
               <span>{formatDate(movement.createdAt)}</span>
               <span>{getStockMovementLabel(movement.type)}</span>
-              <span className="font-black">
+              <span className="font-semibold text-[#0F172A]">
                 {getSignedStockQuantity(movement)}
               </span>
-              <span className="text-slate-600">
+              <span className="text-[#64748B]">
                 {movement.relatedBusinessName || movement.note || "Not yok"}
               </span>
             </div>
           ))}
         </div>
       )}
-    </section>
+    </div>
   );
 }
-
 function getStockMovementLabel(type: NfcStockMovementType): string {
   if (type === "add") {
     return "Stok Eklendi";
@@ -2125,23 +2247,23 @@ function EditSubscriptionRecordModal({
   return (
     <ModalFrame title="Abonelik Düzenle" eyebrow="Muhasebe" onClose={onClose}>
       <div className="grid gap-5 p-5">
-        <div className="rounded-2xl border-2 border-[#1E293B] bg-[#EDE9FE] p-4">
-          <p className="font-heading text-lg font-black text-[#1E293B]">
+        <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+          <p className="font-heading text-lg font-semibold text-[#0F172A]">
             {record.businessName}
           </p>
-          <p className="mt-1 text-sm font-bold text-slate-600">
+          <p className="mt-1 text-sm text-[#64748B]">
             {record.location}
           </p>
           {!record.stockDeducted ? (
-            <p className="mt-3 rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-3 text-xs font-black text-[#1E293B]">
+            <p className="mt-3 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-3 text-xs font-semibold text-[#92400E]">
               Bu eski kayıt stok sistemi öncesinde oluşturuldu. NFC adet
               değişiklikleri stok hareketi oluşturmaz.
             </p>
           ) : null}
         </div>
 
-        <div className="grid gap-3 rounded-[24px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4 md:grid-cols-[1fr_auto] md:items-end">
-          <p className="text-sm font-bold text-[#1E293B]">
+        <div className="grid gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4 md:grid-cols-[1fr_auto] md:items-end">
+          <p className="text-sm text-[#64748B]">
             Paket değiştirince özel değerler otomatik ezilmez. İstersen preset
             değerlerini ayrı düğmeyle uygula.
           </p>
@@ -2241,7 +2363,7 @@ function SubscriptionRecordModal({
     <ModalFrame title="Yeni Abonelik Kaydı" eyebrow="Muhasebe" onClose={onClose}>
       <div className="grid gap-5 p-5">
         {subscribers.length === 0 ? (
-          <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
+          <p className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-sm text-[#64748B]">
             {emptySubscriberMessage}
           </p>
         ) : (
@@ -2270,11 +2392,11 @@ function SubscriptionRecordModal({
 
             {selectedSubscriber ? (
               <div className="grid gap-5">
-                <div className="rounded-2xl border-2 border-[#1E293B] bg-[#EDE9FE] p-4">
-                  <p className="font-heading text-lg font-black text-[#1E293B]">
+                <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+                  <p className="font-heading text-lg font-semibold text-[#0F172A]">
                     {selectedSubscriber.businessName}
                   </p>
-                  <p className="mt-1 text-sm font-bold text-slate-600">
+                  <p className="mt-1 text-sm text-[#64748B]">
                     {selectedSubscriber.category} • {selectedSubscriber.location}
                   </p>
                 </div>
@@ -2298,8 +2420,8 @@ function SubscriptionRecordModal({
                     </FormField>
                   </div>
 
-                  <div className="rounded-[24px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
-                    <h3 className="font-heading text-xl font-black text-[#1E293B]">
+                  <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+                    <h3 className="font-heading text-lg font-semibold text-[#0F172A]">
                       Hesap Özeti
                     </h3>
                     <div className="mt-4 grid gap-3">
@@ -2569,11 +2691,11 @@ function CostFields<TField extends string>({
           value={formState.nfcCardQuantity}
           onChange={(value) => onUpdateField("nfcCardQuantity" as TField, value)}
         />
-        <p className="text-xs font-black text-slate-500">
+        <p className="text-xs font-medium text-[#64748B]">
           Mevcut stok: {currentStock} adet
         </p>
         {exceedsStock ? (
-          <p className="rounded-2xl border-2 border-[#1E293B] bg-[#F472B6] p-2 text-xs font-black text-[#1E293B]">
+          <p className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] p-2 text-xs font-semibold text-[#B91C1C]">
             Girilen adet mevcut stoktan fazla.
           </p>
         ) : null}
@@ -2620,57 +2742,52 @@ function CostFields<TField extends string>({
 
 function SubscriptionListItem({
   record,
+  currentMonthKey,
   onOpenDetail,
   onOpenEdit,
-  onDelete,
 }: {
   record: NormalizedAccountingRecord;
+  currentMonthKey: string;
   onOpenDetail: (record: NormalizedAccountingRecord) => void;
   onOpenEdit: (record: NormalizedAccountingRecord) => void;
-  onDelete: (recordId: string) => void;
 }) {
+  const currentPayment = record.paymentsByMonth[currentMonthKey];
+
   return (
-    <article className="rounded-[20px] border-2 border-[#1E293B] bg-white p-4 shadow-[3px_3px_0_#1E293B]">
-      <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
-        <div>
-          <h3 className="font-heading text-lg font-black text-[#1E293B]">
-            {record.businessName}
-          </h3>
-          <p className="mt-1 text-sm font-bold text-slate-600">
-            {record.packageName} • {formatCurrency(record.monthlyFee)} / ay
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Pill
-              label={getStatusLabel(record.status)}
-              color={getStatusColor(record.status)}
-            />
-            <Pill label={`${record.paidMonthCount} ay ödendi`} color="#D1FAE5" />
-            <Pill label={`${record.subscriptionMonths} ay`} color="#FFFDF5" />
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:justify-end">
-          <button
-            type="button"
-            onClick={() => onOpenDetail(record)}
-            className="btn-secondary min-h-10 px-3 text-xs"
-          >
-            Detay
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenEdit(record)}
-            className="btn-primary min-h-10 px-3 text-xs"
-          >
-            Düzenle
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(record.id)}
-            className="btn-danger min-h-10 px-3 text-xs"
-          >
-            Sil
-          </button>
-        </div>
+    <article className="grid gap-3 bg-white p-4 md:grid-cols-[minmax(0,1.5fr)_0.7fr_0.7fr_0.7fr_0.7fr_0.8fr_1fr] md:items-center">
+      <div className="min-w-0">
+        <h3 className="truncate font-heading text-base font-semibold text-[#0F172A]">
+          {record.businessName}
+        </h3>
+        <p className="mt-1 truncate text-sm text-[#64748B]">
+          {record.location}
+        </p>
+      </div>
+      <MiniMetric label="Paket" value={record.packageName} />
+      <MiniMetric label="Aylık Ücret" value={formatCurrency(record.monthlyFee)} />
+      <MiniMetric label="Kurulum" value={formatCurrency(record.setupFee)} />
+      <div>
+        <Pill label={getStatusLabel(record.status)} tone={getStatusTone(record.status)} />
+      </div>
+      <MiniMetric
+        label="Bu Ay Ödeme"
+        value={currentPayment?.isPaid ? "Ödendi" : "Bekliyor"}
+      />
+      <div className="flex flex-wrap gap-2 md:justify-end">
+        <button
+          type="button"
+          onClick={() => onOpenDetail(record)}
+          className="btn-secondary min-h-10 px-3 text-xs"
+        >
+          Detay
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenEdit(record)}
+          className="btn-primary min-h-10 px-3 text-xs"
+        >
+          Düzenle
+        </button>
       </div>
     </article>
   );
@@ -2679,45 +2796,33 @@ function SubscriptionListItem({
 function OneTimeListItem({
   record,
   onOpenDetail,
-  onDelete,
 }: {
   record: NormalizedAccountingRecord;
   onOpenDetail: (record: NormalizedAccountingRecord) => void;
-  onDelete: (recordId: string) => void;
 }) {
   return (
-    <article className="rounded-[20px] border-2 border-[#1E293B] bg-white p-4 shadow-[3px_3px_0_#1E293B]">
-      <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
-        <div>
-          <h3 className="font-heading text-lg font-black text-[#1E293B]">
-            {record.businessName}
-          </h3>
-          <p className="mt-1 text-sm font-bold text-slate-600">
-            {formatCurrency(record.oneTimeSaleAmount)} satış •{" "}
-            {formatDate(record.oneTimeSaleDate)}
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <MiniMetric label="Gider" value={formatCurrency(record.totalExpense)} />
-            <MiniMetric label="Brüt Kâr" value={formatCurrency(record.grossProfit)} />
-            <MiniMetric label="Marj" value={formatPercent(record.profitMargin)} />
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:justify-end">
-          <button
-            type="button"
-            onClick={() => onOpenDetail(record)}
-            className="btn-secondary min-h-10 px-3 text-xs"
-          >
-            Detay
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(record.id)}
-            className="btn-danger min-h-10 px-3 text-xs"
-          >
-            Sil
-          </button>
-        </div>
+    <article className="grid gap-3 bg-white p-4 md:grid-cols-[minmax(0,1.5fr)_0.75fr_0.75fr_0.75fr_0.55fr_0.75fr_0.7fr] md:items-center">
+      <div className="min-w-0">
+        <h3 className="truncate font-heading text-base font-semibold text-[#0F172A]">
+          {record.businessName}
+        </h3>
+        <p className="mt-1 truncate text-sm text-[#64748B]">
+          {record.location}
+        </p>
+      </div>
+      <MiniMetric label="Satış Tutarı" value={formatCurrency(record.oneTimeSaleAmount)} />
+      <MiniMetric label="Toplam Gider" value={formatCurrency(record.totalExpense)} />
+      <MiniMetric label="Brüt Kâr" value={formatCurrency(record.grossProfit)} />
+      <MiniMetric label="Marj" value={formatPercent(record.profitMargin)} />
+      <MiniMetric label="Tarih" value={formatDate(record.oneTimeSaleDate)} />
+      <div className="flex justify-start md:justify-end">
+        <button
+          type="button"
+          onClick={() => onOpenDetail(record)}
+          className="btn-secondary min-h-10 px-3 text-xs"
+        >
+          Detay
+        </button>
       </div>
     </article>
   );
@@ -2727,11 +2832,13 @@ function AccountingDetailModal({
   record,
   currentMonthKey,
   onOpenEdit,
+  onDelete,
   onClose,
 }: {
   record: NormalizedAccountingRecord;
   currentMonthKey: string;
   onOpenEdit: (record: NormalizedAccountingRecord) => void;
+  onDelete: (recordId: string) => void;
   onClose: () => void;
 }) {
   const currentPayment = record.paymentsByMonth[currentMonthKey];
@@ -2753,9 +2860,8 @@ function AccountingDetailModal({
       onClose={onClose}
     >
       <div className="grid gap-5 p-5">
-        <p className="text-sm font-bold text-slate-600">
-          {record.location} •{" "}
-          {record.recordType === "subscription"
+        <p className="text-sm text-[#64748B]">
+          {record.location} • {record.recordType === "subscription"
             ? record.packageName
             : formatDate(record.oneTimeSaleDate)}
         </p>
@@ -2764,7 +2870,7 @@ function AccountingDetailModal({
           <>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <MetricBadge
-                label="Satış"
+                label="Satış Tutarı"
                 value={formatCurrency(record.oneTimeSaleAmount)}
               />
               <MetricBadge
@@ -2799,24 +2905,24 @@ function AccountingDetailModal({
                 value={formatCurrency(record.monthlyFee)}
               />
               <MetricBadge
-                label="Süre"
-                value={`${record.subscriptionMonths} ay`}
+                label="Dahil NFC"
+                value={`${record.nfcCardQuantity} adet`}
               />
               <MetricBadge
                 label="Başlangıç"
                 value={formatDate(record.subscriptionStartDate)}
               />
               <MetricBadge
-                label="NFC Adedi"
-                value={`${record.nfcCardQuantity} adet`}
+                label="Bu Ay Ödeme"
+                value={currentPayment?.isPaid ? "Ödendi" : "Bekliyor"}
+              />
+              <MetricBadge
+                label="Kurulum Stok"
+                value={record.stockDeducted ? "Düşüldü" : "Eski kayıt"}
               />
               <MetricBadge
                 label="Ödenen Ay"
                 value={`${record.paidMonthCount} ay`}
-              />
-              <MetricBadge
-                label="Bu Ay Ödendi mi"
-                value={currentPayment?.isPaid ? "Evet" : "Hayır"}
               />
               <MetricBadge
                 label="Toplam Gider"
@@ -2832,9 +2938,9 @@ function AccountingDetailModal({
         )}
 
         {record.note ? (
-          <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
-            <p className="text-xs font-black uppercase text-slate-500">Not</p>
-            <p className="mt-2 text-sm font-bold text-[#1E293B]">{record.note}</p>
+          <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+            <p className="text-xs font-medium text-[#64748B]">Not</p>
+            <p className="mt-2 text-sm font-medium text-[#0F172A]">{record.note}</p>
           </div>
         ) : null}
       </div>
@@ -2849,6 +2955,13 @@ function AccountingDetailModal({
             Düzenle
           </button>
         ) : null}
+        <button
+          type="button"
+          onClick={() => onDelete(record.id)}
+          className="btn-danger"
+        >
+          Sil
+        </button>
         <button type="button" onClick={onClose} className="btn-secondary">
           Kapat
         </button>
@@ -2856,7 +2969,6 @@ function AccountingDetailModal({
     </ModalFrame>
   );
 }
-
 function ExpenseBreakdown({ record }: { record: NormalizedAccountingRecord }) {
   const items = [
     ["NFC Kart", record.nfcCardTotalCost],
@@ -2868,9 +2980,9 @@ function ExpenseBreakdown({ record }: { record: NormalizedAccountingRecord }) {
   ];
 
   return (
-    <div className="rounded-[24px] border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
-      <h3 className="font-heading text-xl font-black text-[#1E293B]">
-        Gider Dağılımı
+    <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+      <h3 className="font-heading text-lg font-semibold text-[#0F172A]">
+        Gider ve Kârlılık Detayı
       </h3>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map(([label, value]) => (
@@ -2891,12 +3003,12 @@ function SectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#EDE9FE] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-[#E2E8F0] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h2 className="font-heading text-xl font-black text-[#1E293B]">
+        <h2 className="font-heading text-lg font-semibold text-[#0F172A]">
           {title}
         </h2>
-        <p className="mt-1 text-sm font-bold text-slate-600">{subtitle}</p>
+        <p className="mt-1 text-sm text-[#64748B]">{subtitle}</p>
       </div>
       {action}
     </div>
@@ -2906,20 +3018,23 @@ function SectionHeader({
 function SummaryCard({
   label,
   value,
-  color,
+  tone,
 }: {
   label: string;
   value: string;
-  color: string;
+  tone: "blue" | "green" | "amber" | "red";
 }) {
+  const toneClass = {
+    blue: "text-[#2563EB]",
+    green: "text-[#16A34A]",
+    amber: "text-[#D97706]",
+    red: "text-[#DC2626]",
+  }[tone];
+
   return (
-    <article className="card-pop relative overflow-hidden p-5">
-      <div
-        className="absolute -right-4 -top-5 h-20 w-20 rotate-12 rounded-[28px] border-2 border-[#1E293B]"
-        style={{ backgroundColor: color }}
-      />
-      <p className="relative text-sm font-extrabold text-slate-600">{label}</p>
-      <p className="relative mt-4 font-heading text-3xl font-black text-[#1E293B] sm:text-4xl">
+    <article className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium text-[#64748B]">{label}</p>
+      <p className={`mt-2 font-heading text-2xl font-semibold ${toneClass}`}>
         {value}
       </p>
     </article>
@@ -2928,51 +3043,72 @@ function SummaryCard({
 
 function ShareCard({
   label,
+  percentage,
   value,
-  color,
+  helper,
+  tone,
 }: {
   label: string;
+  percentage: string;
   value: string;
-  color: string;
+  helper?: string;
+  tone: "blue" | "green" | "slate";
 }) {
+  const toneClass = {
+    blue: "bg-[#EFF6FF] text-[#2563EB]",
+    green: "bg-[#F0FDF4] text-[#16A34A]",
+    slate: "bg-[#F8FAFC] text-[#475569]",
+  }[tone];
+
   return (
-    <article className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]">
-      <span
-        className="inline-flex h-4 w-14 rounded-full border-2 border-[#1E293B]"
-        style={{ backgroundColor: color }}
-      />
-      <p className="mt-4 text-sm font-extrabold text-slate-600">{label}</p>
-      <p className="mt-2 font-heading text-2xl font-black text-[#1E293B]">
+    <article className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
+      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${toneClass}`}>
+        {percentage}
+      </span>
+      <p className="mt-3 text-sm font-medium text-[#64748B]">{label}</p>
+      <p className="mt-1 font-heading text-2xl font-semibold text-[#0F172A]">
         {value}
       </p>
+      {helper ? <p className="mt-2 text-xs text-[#64748B]">{helper}</p> : null}
     </article>
   );
 }
 
 function MetricBadge({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border-2 border-[#1E293B] bg-white p-3">
-      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-black text-[#1E293B]">{value}</p>
+    <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+      <p className="text-xs font-medium text-[#64748B]">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
     </div>
   );
 }
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-2">
-      <p className="text-[11px] font-black uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-xs font-black text-[#1E293B]">{value}</p>
+    <div>
+      <p className="text-xs font-medium text-[#64748B]">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
     </div>
   );
 }
 
-function Pill({ label, color }: { label: string; color: string }) {
+function Pill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "green" | "amber" | "red" | "blue" | "slate";
+}) {
+  const toneClass = {
+    green: "bg-[#F0FDF4] text-[#166534] border-[#BBF7D0]",
+    amber: "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]",
+    red: "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]",
+    blue: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]",
+    slate: "bg-[#F8FAFC] text-[#475569] border-[#E2E8F0]",
+  }[tone];
+
   return (
-    <span
-      className="rounded-full border-2 border-[#1E293B] px-3 py-1 text-xs font-black text-[#1E293B]"
-      style={{ backgroundColor: color }}
-    >
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`}>
       {label}
     </span>
   );
@@ -2981,7 +3117,7 @@ function Pill({ label, color }: { label: string; color: string }) {
 function EmptyBox({ text }: { text: string }) {
   return (
     <div className="p-5">
-      <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
+      <p className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-sm text-[#64748B]">
         {text}
       </p>
     </div>
@@ -2990,7 +3126,7 @@ function EmptyBox({ text }: { text: string }) {
 
 function ErrorMessage({ message }: { message: string }) {
   return (
-    <p className="rounded-2xl border-2 border-[#1E293B] bg-[#F472B6] p-3 text-sm font-black text-[#1E293B]">
+    <p className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] p-3 text-sm font-semibold text-[#B91C1C]">
       {message}
     </p>
   );
@@ -3008,16 +3144,21 @@ function ModalFrame({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6">
-      <section className="hard-shadow-lg max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border-2 border-[#1E293B] bg-white">
-        <div className="flex items-start justify-between gap-4 border-b-2 border-[#1E293B] bg-[#F5F3FF] px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/45 px-4 py-6">
+      <section className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] bg-white px-5 py-4">
           <div>
-            <p className="page-eyebrow bg-[#34D399]">{eyebrow}</p>
-            <h2 className="mt-3 font-heading text-3xl font-black text-[#1E293B]">
+            <p className="page-eyebrow">{eyebrow}</p>
+            <h2 className="mt-3 font-heading text-2xl font-semibold text-[#0F172A]">
               {title}
             </h2>
           </div>
-          <button type="button" onClick={onClose} className="btn-secondary min-h-10 px-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-secondary min-h-10 px-4"
+            aria-label="Modalı kapat"
+          >
             Kapat
           </button>
         </div>
@@ -3029,7 +3170,7 @@ function ModalFrame({
 
 function ModalActions({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-3 border-t-2 border-[#1E293B] px-5 py-4 sm:flex-row sm:justify-end">
+    <div className="flex flex-col gap-3 border-t border-[#E2E8F0] px-5 py-4 sm:flex-row sm:justify-end">
       {children}
     </div>
   );
@@ -3044,12 +3185,11 @@ function FormField({
 }) {
   return (
     <label className="grid gap-2">
-      <span className="text-sm font-black text-[#1E293B]">{label}</span>
+      <span className="text-sm font-semibold text-[#0F172A]">{label}</span>
       {children}
     </label>
   );
 }
-
 function NumberInput({
   value,
   onChange,

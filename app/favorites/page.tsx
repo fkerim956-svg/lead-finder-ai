@@ -19,10 +19,11 @@ import type { BusinessResult, ReviewCardSubscriber } from "@/types/business";
 type FavoriteBusiness = BusinessResult & {
   note?: string;
   tag?: string;
+  selectedIntent?: SelectedIntent;
 };
 
 type SelectedIntent = "review-card" | "web-design";
-type SortColumn = "rating" | "reviewCount" | "leadScore" | "reviewCardScore" | "webDesignScore";
+type SortColumn = "rating" | "reviewCount" | "primaryScore";
 type SortDirection = "asc" | "desc";
 
 const tagOptions = [
@@ -108,12 +109,44 @@ function getBusinessKey(business: Pick<FavoriteBusiness, "businessName" | "locat
   return `${business.businessName.trim().toLocaleLowerCase("tr-TR")}::${business.location.trim().toLocaleLowerCase("tr-TR")}`;
 }
 
+function getFavoriteIntent(
+  business: FavoriteBusiness,
+  fallbackIntent: SelectedIntent,
+): SelectedIntent {
+  return business.selectedIntent === "web-design" ||
+    business.selectedIntent === "review-card"
+    ? business.selectedIntent
+    : fallbackIntent;
+}
+
+function getPrimaryScore(
+  business: FavoriteBusiness,
+  fallbackIntent: SelectedIntent,
+): number {
+  return getFavoriteIntent(business, fallbackIntent) === "web-design"
+    ? getWebDesignScore(business)
+    : getReviewCardScore(business);
+}
+
+function getScoreColumnLabel(
+  businesses: FavoriteBusiness[],
+  fallbackIntent: SelectedIntent,
+): string {
+  const intents = new Set(
+    businesses.map((business) => getFavoriteIntent(business, fallbackIntent)),
+  );
+
+  if (intents.size > 1) {
+    return "Ana Skor";
+  }
+
+  return intents.has("web-design") ? "Web Tasarım Skoru" : "Yorum Kart Skoru";
+}
+
 export default function FavoritesPage() {
   const [selectedIntent] = useState<SelectedIntent>(getSelectedIntent);
   const [favorites, setFavorites] = useState<FavoriteBusiness[]>(getFavorites);
-  const [sortColumn, setSortColumn] = useState<SortColumn>(
-    selectedIntent === "web-design" ? "webDesignScore" : "reviewCardScore",
-  );
+  const [sortColumn, setSortColumn] = useState<SortColumn>("primaryScore");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedDetailBusiness, setSelectedDetailBusiness] =
     useState<FavoriteBusiness | null>(null);
@@ -122,6 +155,7 @@ export default function FavoritesPage() {
   >(getReviewCardSubscribers);
   const [searchQuery, setSearchQuery] = useState("");
   const isReviewCardMode = selectedIntent === "review-card";
+  const scoreColumnLabel = getScoreColumnLabel(favorites, selectedIntent);
 
   const reviewCardSubscriberKeys = useMemo(() => {
     return new Set(
@@ -136,21 +170,11 @@ export default function FavoritesPage() {
     const subscriberCount = favorites.filter((business) =>
       reviewCardSubscriberKeys.has(getBusinessKey(business)),
     ).length;
-    const averageLeadScore =
-      favorites.length > 0
-        ? Math.round(
-            favorites.reduce(
-              (totalScore, business) => totalScore + business.leadScore,
-              0,
-            ) / favorites.length,
-          )
-        : 0;
 
     return {
       totalFavorites: favorites.length,
       meetingCount,
       subscriberCount,
-      averageLeadScore,
     };
   }, [favorites, reviewCardSubscriberKeys]);
 
@@ -176,13 +200,13 @@ export default function FavoritesPage() {
 
   const sortedFavorites = useMemo(() => {
     return [...filteredFavorites].sort((firstBusiness, secondBusiness) => {
-      const firstValue = getSortValue(firstBusiness, sortColumn);
-      const secondValue = getSortValue(secondBusiness, sortColumn);
+      const firstValue = getSortValue(firstBusiness, sortColumn, selectedIntent);
+      const secondValue = getSortValue(secondBusiness, sortColumn, selectedIntent);
       const directionMultiplier = sortDirection === "asc" ? 1 : -1;
 
       return (firstValue - secondValue) * directionMultiplier;
     });
-  }, [filteredFavorites, sortColumn, sortDirection]);
+  }, [filteredFavorites, selectedIntent, sortColumn, sortDirection]);
 
   function saveFavorites(updatedFavorites: FavoriteBusiness[]) {
     setFavorites(updatedFavorites);
@@ -270,7 +294,12 @@ export default function FavoritesPage() {
     }
 
     setSortColumn(nextColumn);
-    setSortDirection("asc");
+    setSortDirection("desc");
+  }
+
+  function handleMobileSort(nextColumn: SortColumn) {
+    setSortColumn(nextColumn);
+    setSortDirection("desc");
   }
 
   return (
@@ -299,11 +328,6 @@ export default function FavoritesPage() {
             label="Abone Yapıldı"
             value={summaryStats.subscriberCount}
             color="#34D399"
-          />
-          <SummaryCard
-            label="Ortalama Fırsat Skoru"
-            value={`${summaryStats.averageLeadScore}/100`}
-            color="#F472B6"
           />
         </section>
 
@@ -346,32 +370,49 @@ export default function FavoritesPage() {
                 </p>
               </div>
 
-              <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                  {(isReviewCardMode
-                    ? [
-                        ["Puan", "rating"],
-                        ["Yorum", "reviewCount"],
-                        ["Fırsat", "leadScore"],
-                        ["Yorum Kart", "reviewCardScore"],
-                      ]
-                    : [
-                        ["Puan", "rating"],
-                        ["Yorum", "reviewCount"],
-                        ["Fırsat", "leadScore"],
-                        ["Web Tasarım", "webDesignScore"],
-                      ]
-                  ).map(([label, column]) => (
-                    <MobileSortButton
-                      key={column}
-                      label={label}
-                      column={column as SortColumn}
-                      activeColumn={sortColumn}
-                      direction={sortDirection}
-                      onSort={handleSort}
-                    />
-                  ))}
-                </div>
+              <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] p-3 lg:hidden">
+                <label className="grid gap-2">
+                  <span className="text-xs font-semibold text-[#64748B]">
+                    Sırala
+                  </span>
+                  <select
+                    value={sortColumn}
+                    onChange={(event) =>
+                      handleMobileSort(event.target.value as SortColumn)
+                    }
+                    className="input-pop min-h-10 w-full text-sm"
+                  >
+                    <option value="rating">Puan</option>
+                    <option value="reviewCount">Yorum</option>
+                    <option value="primaryScore">{scoreColumnLabel}</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="hidden border-b border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B] lg:grid lg:grid-cols-[minmax(280px,1fr)_110px_120px_170px_170px] lg:items-center">
+                <span>İşletme</span>
+                <FavoriteSortableHeader
+                  label="Puan"
+                  column="rating"
+                  activeColumn={sortColumn}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <FavoriteSortableHeader
+                  label="Yorum"
+                  column="reviewCount"
+                  activeColumn={sortColumn}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <FavoriteSortableHeader
+                  label={scoreColumnLabel}
+                  column="primaryScore"
+                  activeColumn={sortColumn}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                />
+                <span className="text-right">Aksiyonlar</span>
               </div>
 
               {sortedFavorites.length === 0 ? (
@@ -386,7 +427,7 @@ export default function FavoritesPage() {
                     <FavoriteCompactItem
                       key={`${business.businessName}-${business.location}`}
                       business={business}
-                      isReviewCardMode={isReviewCardMode}
+                      fallbackIntent={selectedIntent}
                       isSubscriber={isReviewCardSubscriber(business)}
                       onOpenDetail={setSelectedDetailBusiness}
                       onToggleSubscriber={handleToggleSubscriber}
@@ -402,7 +443,7 @@ export default function FavoritesPage() {
       {selectedDetailBusiness ? (
         <FavoriteDetailModal
           business={selectedDetailBusiness}
-          isReviewCardMode={isReviewCardMode}
+          fallbackIntent={selectedIntent}
           isSubscriber={isReviewCardSubscriber(selectedDetailBusiness)}
           onUpdateFavorite={handleUpdateFavorite}
           onToggleSubscriber={handleToggleSubscriber}
@@ -434,31 +475,33 @@ function SummaryCard({
 
 function FavoriteCompactItem({
   business,
-  isReviewCardMode,
+  fallbackIntent,
   isSubscriber,
   onOpenDetail,
   onToggleSubscriber,
 }: {
   business: FavoriteBusiness;
-  isReviewCardMode: boolean;
+  fallbackIntent: SelectedIntent;
   isSubscriber: boolean;
   onOpenDetail: (business: FavoriteBusiness) => void;
   onToggleSubscriber: (business: FavoriteBusiness) => void;
 }) {
-  const primaryScore = isReviewCardMode
-    ? getReviewCardScore(business)
-    : getWebDesignScore(business);
-  const primaryScoreLabel = isReviewCardMode ? "Yorum Kart" : "Web Tasarım";
+  const businessIntent = getFavoriteIntent(business, fallbackIntent);
+  const isReviewCardBusiness = businessIntent === "review-card";
+  const primaryScore = getPrimaryScore(business, fallbackIntent);
+  const primaryScoreLabel = isReviewCardBusiness
+    ? "Yorum Kart Skoru"
+    : "Web Tasarım Skoru";
 
   return (
-    <article className="grid gap-4 bg-white p-4 transition hover:bg-[#F8FAFC] lg:grid-cols-[minmax(0,1fr)_92px_92px_132px_178px] lg:items-center">
+    <article className="grid gap-4 bg-white p-4 transition hover:bg-[#F8FAFC] lg:grid-cols-[minmax(280px,1fr)_110px_120px_170px_170px] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-heading text-base font-semibold text-[#0F172A]">
             {business.businessName}
           </h3>
           <span className="badge-pop bg-[#EFF6FF] text-[#2563EB]">
-            {isReviewCardMode ? "Yorum Kart" : "Web Tasarım"}
+            {isReviewCardBusiness ? "Yorum Kart" : "Web Tasarım"}
           </span>
         </div>
         <p className="mt-1 text-sm text-[#64748B]">
@@ -471,24 +514,25 @@ function FavoriteCompactItem({
         </div>
       </div>
 
-      <div className="hidden lg:block">
-        <CompactMetric label="Puan" value={business.rating.toFixed(1)} />
-      </div>
-      <div className="hidden lg:block">
-        <CompactMetric label="Yorum" value={business.reviewCount} />
-      </div>
-      <div className="hidden lg:block">
-        <CompactMetric label={primaryScoreLabel} value={`${primaryScore}/100`} />
-      </div>
+      <DesktopMetricValue value={business.rating.toFixed(1)} />
+      <DesktopMetricValue value={business.reviewCount} />
+      <DesktopMetricValue value={`${primaryScore}/100`} />
 
       <div
         className={`grid gap-2 lg:flex lg:flex-nowrap lg:items-center lg:justify-end lg:whitespace-nowrap ${
-          isReviewCardMode
-            ? "grid-cols-[44px_1fr_44px]"
+          isReviewCardBusiness
+            ? "grid-cols-[44px_44px_1fr]"
             : "grid-cols-[44px_1fr]"
         }`}
       >
         <MapsIconButton business={business} />
+        {isReviewCardBusiness ? (
+          <SubscriberButton
+            business={business}
+            isSubscriber={isSubscriber}
+            onToggleSubscriber={onToggleSubscriber}
+          />
+        ) : null}
         <button
           type="button"
           onClick={() => onOpenDetail(business)}
@@ -496,13 +540,6 @@ function FavoriteCompactItem({
         >
           Detay
         </button>
-        {isReviewCardMode ? (
-          <SubscriberButton
-            business={business}
-            isSubscriber={isSubscriber}
-            onToggleSubscriber={onToggleSubscriber}
-          />
-        ) : null}
       </div>
     </article>
   );
@@ -510,7 +547,7 @@ function FavoriteCompactItem({
 
 function FavoriteDetailModal({
   business,
-  isReviewCardMode,
+  fallbackIntent,
   isSubscriber,
   onUpdateFavorite,
   onToggleSubscriber,
@@ -518,7 +555,7 @@ function FavoriteDetailModal({
   onClose,
 }: {
   business: FavoriteBusiness;
-  isReviewCardMode: boolean;
+  fallbackIntent: SelectedIntent;
   isSubscriber: boolean;
   onUpdateFavorite: (
     business: FavoriteBusiness,
@@ -528,6 +565,8 @@ function FavoriteDetailModal({
   onRemoveFavorite: (business: FavoriteBusiness) => void;
   onClose: () => void;
 }) {
+  const businessIntent = getFavoriteIntent(business, fallbackIntent);
+  const isReviewCardMode = businessIntent === "review-card";
   const reviewCardScore = getReviewCardScore(business);
   const webDesignScore = getWebDesignScore(business);
 
@@ -561,12 +600,11 @@ function FavoriteDetailModal({
                 value={`${reviewCardScore}/100`}
               />
             ) : (
-              <MetricBadge
+            <MetricBadge
                 label="Web Tasarım"
                 value={`${webDesignScore}/100`}
               />
             )}
-            <MetricBadge label="Genel Fırsat" value={`⭐ ${business.leadScore}/100`} />
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -625,7 +663,11 @@ function FavoriteDetailModal({
   );
 }
 
-function getSortValue(business: FavoriteBusiness, column: SortColumn): number {
+function getSortValue(
+  business: FavoriteBusiness,
+  column: SortColumn,
+  fallbackIntent: SelectedIntent,
+): number {
   if (column === "rating") {
     return business.rating;
   }
@@ -634,18 +676,14 @@ function getSortValue(business: FavoriteBusiness, column: SortColumn): number {
     return business.reviewCount;
   }
 
-  if (column === "reviewCardScore") {
-    return getReviewCardScore(business);
+  if (column === "primaryScore") {
+    return getPrimaryScore(business, fallbackIntent);
   }
 
-  if (column === "webDesignScore") {
-    return getWebDesignScore(business);
-  }
-
-  return business.leadScore;
+  return getPrimaryScore(business, fallbackIntent);
 }
 
-function MobileSortButton({
+function FavoriteSortableHeader({
   label,
   column,
   activeColumn,
@@ -659,22 +697,22 @@ function MobileSortButton({
   onSort: (column: SortColumn) => void;
 }) {
   const isActive = activeColumn === column;
-  const indicator = isActive ? ` ${direction === "asc" ? "↑" : "↓"}` : "";
+  const indicator = isActive ? (direction === "asc" ? "↑" : "↓") : "";
 
   return (
     <button
       type="button"
       onClick={() => onSort(column)}
-      className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+      className={`inline-flex min-h-8 w-fit items-center gap-1 rounded-md px-2 py-1 text-left text-xs font-semibold transition focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[rgba(37,99,235,0.28)] ${
         isActive
-          ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-          : "border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F1F5F9]"
+          ? "bg-[#EFF6FF] text-[#2563EB]"
+          : "text-[#475569] hover:bg-white hover:text-[#0F172A]"
       }`}
-      aria-label={`${label} sıralaması`}
-      title={`${label} sıralaması`}
+      aria-label={`${label} başlığına göre sırala`}
+      title={`${label} başlığına göre sırala`}
     >
-      {label}
-      {indicator}
+      <span>{label}</span>
+      {indicator ? <span aria-hidden="true">{indicator}</span> : null}
     </button>
   );
 }
@@ -690,6 +728,14 @@ function CompactMetric({
     <div>
       <p className="text-xs font-medium text-[#64748B]">{label}</p>
       <p className="mt-1 text-sm font-semibold text-[#0F172A]">{value}</p>
+    </div>
+  );
+}
+
+function DesktopMetricValue({ value }: { value: string | number }) {
+  return (
+    <div className="hidden text-sm font-semibold text-[#0F172A] lg:block">
+      {value}
     </div>
   );
 }

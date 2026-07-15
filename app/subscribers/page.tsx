@@ -470,7 +470,6 @@ function SubscriberDetailModal({
               value={`${reviewCardScore}/100`}
               helper={getReviewCardRiskLevel(reviewCardScore)}
             />
-            <MetricBadge label="Fırsat" value={`⭐ ${subscriber.leadScore}/100`} />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">

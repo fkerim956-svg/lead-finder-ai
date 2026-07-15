@@ -33,12 +33,14 @@ import type {
 } from "@/types/business";
 
 type SortOption =
-  | "leadScore"
   | "rating"
   | "reviewCount"
   | "reviewCardScore"
   | "webDesignScore";
 type SortDirection = "asc" | "desc";
+type FavoriteBusiness = BusinessResult & {
+  selectedIntent?: SelectedIntent;
+};
 
 function getSelectedIntent(): SelectedIntent {
   if (typeof window === "undefined") {
@@ -208,7 +210,7 @@ export default function ResultsPage() {
   );
   const [analysisHistory, setAnalysisHistory] =
     useState<AnalysisHistoryItem[]>(initialResultsState.analysisHistory);
-  const [favorites, setFavorites] = useState<BusinessResult[]>(() => {
+  const [favorites, setFavorites] = useState<FavoriteBusiness[]>(() => {
     if (typeof window === "undefined") {
       return [];
     }
@@ -220,7 +222,7 @@ export default function ResultsPage() {
     }
 
     try {
-      return JSON.parse(savedFavorites) as BusinessResult[];
+      return JSON.parse(savedFavorites) as FavoriteBusiness[];
     } catch {
       window.localStorage.removeItem(FAVORITES_STORAGE_KEY);
       return [];
@@ -349,7 +351,6 @@ export default function ResultsPage() {
           "Web Sitesi",
           "Telefon",
           "Yorum Kart Skoru",
-          "Lead Score",
           "Google Maps Linki",
         ]
       : [
@@ -361,7 +362,6 @@ export default function ResultsPage() {
           "Web Sitesi",
           "Telefon",
           "Web Tasarım Skoru",
-          "Lead Score",
           "Google Maps Linki",
         ];
 
@@ -374,7 +374,6 @@ export default function ResultsPage() {
       business.hasWebsite ? "Var" : "Yok",
       business.hasPhone ? "Var" : "Yok",
       isReviewCardMode ? getReviewCardScore(business) : getWebScore(business),
-      business.leadScore,
       getSafeMapsUrl(business),
     ]);
 
@@ -415,7 +414,7 @@ export default function ResultsPage() {
       return;
     }
 
-    const updatedFavorites = [...favorites, business];
+    const updatedFavorites = [...favorites, { ...business, selectedIntent }];
 
     setFavorites(updatedFavorites);
     window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updatedFavorites));
@@ -716,13 +715,11 @@ export default function ResultsPage() {
                       ["Puan", "rating"],
                       ["Yorum", "reviewCount"],
                       ["Yorum Kart", "reviewCardScore"],
-                      ["Fırsat", "leadScore"],
                     ]
                   : [
                       ["Web Tasarım", "webDesignScore"],
                       ["Puan", "rating"],
                       ["Yorum", "reviewCount"],
-                      ["Fırsat", "leadScore"],
                     ]
                 ).map(([label, column]) => (
                   <MobileSortButton
@@ -848,7 +845,7 @@ function getSortValue(business: BusinessResult, sortBy: SortOption): number {
     return getWebScore(business);
   }
 
-  return business.leadScore;
+  return getReviewCardScore(business);
 }
 
 function BusinessDetailModal({
@@ -910,7 +907,6 @@ function BusinessDetailModal({
                   reviewCardScore,
                 )}`}
               />
-              <DetailItem label="Genel Fırsat Skoru" value={`⭐ ${business.leadScore}/100`} />
               <DetailItem
                 label="Yorum Kart Aboneliği"
                 value={isSubscriber ? "Abone" : "Abone değil"}
@@ -928,7 +924,6 @@ function BusinessDetailModal({
                   webDesignScore,
                 )}`}
               />
-              <DetailItem label="Genel Fırsat Skoru" value={`⭐ ${business.leadScore}/100`} />
               <DetailItem
                 label="Favori Durumu"
                 value={isFavorite ? "Favoride" : "Favoride değil"}

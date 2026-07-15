@@ -16,13 +16,14 @@ import { SELECTED_INTENT_STORAGE_KEY } from "@/lib/storage-keys";
 import { districtsByProvince, provinces } from "@/lib/turkey-locations";
 import type { BusinessResult, LatestAnalysis, SelectedIntent } from "@/types/business";
 
+type AnalysisTab = "search" | "manual";
+
 function getSelectedIntent(): SelectedIntent {
   if (typeof window === "undefined") {
     return "review-card";
   }
 
-  return window.localStorage.getItem(SELECTED_INTENT_STORAGE_KEY) ===
-    "web-design"
+  return window.localStorage.getItem(SELECTED_INTENT_STORAGE_KEY) === "web-design"
     ? "web-design"
     : "review-card";
 }
@@ -188,6 +189,18 @@ function createAnalysisNameFromFiles(files: File[]): string {
   return files.length > 1 ? `${baseName} + ${files.length - 1} dosya` : baseName;
 }
 
+function createManualAnalysisName(
+  providedName: string,
+  district: string,
+  category: string,
+): string {
+  const fallbackName = [district.trim(), category.trim()]
+    .filter(Boolean)
+    .join(" ");
+
+  return providedName.trim() || fallbackName || "Manuel Veri";
+}
+
 function validateAnalysisMetadata({
   analysisName,
   city,
@@ -220,6 +233,7 @@ function validateAnalysisMetadata({
 
 export default function NewAnalysisPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<AnalysisTab>("search");
   const [selectedIntent] = useState<SelectedIntent>(getSelectedIntent);
   const [country] = useState("Türkiye");
   const [city, setCity] = useState("İstanbul");
@@ -234,7 +248,7 @@ export default function NewAnalysisPage() {
   const [manualDistrict, setManualDistrict] = useState("");
   const [manualCategory, setManualCategory] = useState("Manuel Veri");
   const [manualImportMessage, setManualImportMessage] = useState("");
-  const [selectedFileCount, setSelectedFileCount] = useState(0);
+  const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
   const [parsedBusinesses, setParsedBusinesses] = useState<BusinessResult[]>([]);
   const availableDistricts = districtsByProvince[city] ?? [];
   const intentContent =
@@ -243,13 +257,13 @@ export default function NewAnalysisPage() {
           label: "Web Tasarım",
           title: "Web Tasarım için işletme analizi",
           subtitle:
-            "Web sitesi olmayan, dijital vitrini zayıf ve ulaşılabilir işletmeleri bul.",
+            "Web sitesi olmayan, dijital vitrini zayıf ve ulaşılabilir işletmeleri bulun.",
         }
       : {
           label: "Yorum Kart",
           title: "Yorum Kart için işletme analizi",
           subtitle:
-            "Google’da puanı düşük, yorumları zayıf veya müşteri güveni eksik görünen işletmeleri bul.",
+            "Google puanı, yorum sayısı ve iletişim bilgilerine göre en uygun işletmeleri önceliklendirin.",
         };
 
   function getFinalAnalysisName(nextDistrict: string, nextCategory: string) {
@@ -261,12 +275,20 @@ export default function NewAnalysisPage() {
   }
 
   function getManualMetadata() {
+    const nextCity = manualCity.trim() || "İstanbul";
+    const nextDistrict = manualDistrict.trim() || "Üsküdar";
+    const nextCategory = manualCategory.trim() || "Manuel Veri";
+
     return {
       country: "Türkiye",
-      city: manualCity.trim(),
-      district: manualDistrict.trim(),
-      category: manualCategory.trim() || "Manuel Veri",
-      analysisName: manualAnalysisName.trim(),
+      city: nextCity,
+      district: nextDistrict,
+      category: nextCategory,
+      analysisName: createManualAnalysisName(
+        manualAnalysisName,
+        nextDistrict,
+        nextCategory,
+      ),
     };
   }
 
@@ -387,8 +409,7 @@ export default function NewAnalysisPage() {
     }
   }
 
-  function saveManualImport(event?: Pick<Event, "preventDefault">) {
-    event?.preventDefault();
+  function saveManualImport() {
     setErrorMessage("");
 
     try {
@@ -410,13 +431,30 @@ export default function NewAnalysisPage() {
     }
   }
 
+  function handlePreviewManualData() {
+    setErrorMessage("");
+
+    try {
+      const businesses = parseAndPreviewManualData(manualData);
+
+      if (businesses.length === 0) {
+        setErrorMessage(
+          "Geçerli işletme bulunamadı. Dosya başlıklarını veya içerikleri kontrol edin.",
+        );
+      }
+    } catch {
+      setErrorMessage("Dosya okunamadı. CSV formatını kontrol edin.");
+      setParsedBusinesses([]);
+    }
+  }
+
   async function handleManualFileUpload(event: ChangeEvent<HTMLInputElement>) {
     event.preventDefault();
     setErrorMessage("");
     setManualImportMessage("");
 
     const files = Array.from(event.target.files ?? []);
-    setSelectedFileCount(files.length);
+    setSelectedFileNames(files.map((file) => file.name));
 
     if (files.length === 0) {
       return;
@@ -456,12 +494,14 @@ export default function NewAnalysisPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
-        <header className="relative grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
+        <header className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="page-eyebrow">{intentContent.label} Modu</p>
-            <h1 className="page-title mt-5">{intentContent.title}</h1>
-            <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
+            <p className="text-sm font-medium text-blue-700">{intentContent.label} Modu</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+              {intentContent.title}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               {intentContent.subtitle}
             </p>
           </div>
@@ -470,211 +510,313 @@ export default function NewAnalysisPage() {
           </Link>
         </header>
 
-        <form onSubmit={handleAnalyze} className="card-pop grid gap-5 p-5 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <SelectField label="Analiz adı">
-              <input
-                type="text"
-                value={analysisName}
-                onChange={(event) => setAnalysisName(event.target.value)}
-                placeholder="Örn: Üsküdar Cafeler - Temmuz"
-                className="input-pop"
-              />
-              <span className="text-xs font-bold text-slate-500">
-                Son Analizler kısmında bu isimle görünecek.
-              </span>
-            </SelectField>
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-3">
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab("search")}
+                className={`min-h-10 rounded-md px-3 text-sm font-semibold transition ${
+                  activeTab === "search"
+                    ? "bg-white text-slate-950 shadow-sm"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Yeni Analiz
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("manual")}
+                className={`min-h-10 rounded-md px-3 text-sm font-semibold transition ${
+                  activeTab === "manual"
+                    ? "bg-white text-slate-950 shadow-sm"
+                    : "text-slate-600 hover:text-slate-950"
+                }`}
+              >
+                Manuel Veri Yükle
+              </button>
+            </div>
           </div>
 
-          <SelectField label="Ülke">
-            <select value={country} disabled className="input-pop">
-              <option value="Türkiye">Türkiye</option>
-            </select>
-          </SelectField>
+          {activeTab === "search" ? (
+            <form onSubmit={handleAnalyze} className="grid gap-5 p-5 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <h2 className="text-lg font-semibold text-slate-950">
+                  Konum ve kategori seç
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Seçili amaç: {intentContent.label}. Bu bilgiler analiz raporunun
+                  temelini oluşturur.
+                </p>
+              </div>
 
-          <SelectField label="Şehir">
-            <select
-              value={city}
-              onChange={(event) => handleCityChange(event.target.value)}
-              className="input-pop"
-            >
-              {provinces.map((province) => (
-                <option key={province} value={province}>
-                  {province}
-                </option>
-              ))}
-            </select>
-          </SelectField>
+              <Field label="Analiz amacı">
+                <input value={intentContent.label} readOnly className="input-pop" />
+              </Field>
 
-          <SelectField label="İlçe">
-            <select
-              value={district}
-              onChange={(event) => setDistrict(event.target.value)}
-              disabled={availableDistricts.length === 0}
-              className="input-pop"
-            >
-              {availableDistricts.length > 0 ? (
-                availableDistricts.map((provinceDistrict) => (
-                  <option key={provinceDistrict} value={provinceDistrict}>
-                    {provinceDistrict}
-                  </option>
-                ))
-              ) : (
-                <option value="">İlçe verisi yakında eklenecek</option>
-              )}
-            </select>
-          </SelectField>
-
-          <SelectField label="Kategori">
-            <select
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              className="input-pop"
-            >
-              {businessCategories.map((businessCategory) => (
-                <option key={businessCategory} value={businessCategory}>
-                  {businessCategory}
-                </option>
-              ))}
-            </select>
-          </SelectField>
-
-          <div className="md:col-span-2">
-            <button type="submit" disabled={isLoading} className="btn-primary">
-              {isLoading ? "Analiz ediliyor..." : "Analiz Et"}
-            </button>
-          </div>
-        </form>
-
-        <section className="card-pop grid gap-5 p-5">
-          <div>
-            <h2 className="font-heading text-2xl font-black text-[#1E293B]">
-              Manuel Veri Yükle
-            </h2>
-            <p className="muted-text mt-2 max-w-3xl text-sm font-bold leading-6">
-              Google API bağlanmadan önce kendi topladığınız CSV veya JSON
-              verileriyle sistemi test edebilirsiniz.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <SelectField label="Analiz adı">
+              <Field label="Analiz adı" helper="Son Analizler kısmında bu isimle görünecek.">
                 <input
                   type="text"
-                  value={manualAnalysisName}
-                  onChange={(event) => setManualAnalysisName(event.target.value)}
-                  placeholder="Örn: Eyüpsultan Çiçekçiler - Temmuz"
+                  value={analysisName}
+                  onChange={(event) => setAnalysisName(event.target.value)}
+                  placeholder="Örn: Üsküdar Cafeler - Temmuz"
                   className="input-pop"
                 />
-                <span className="text-xs font-bold text-slate-500">
-                  Bu isim Dashboard ve Analiz Geçmişi bölümünde görünecek.
-                </span>
-              </SelectField>
-            </div>
+              </Field>
 
-            <SelectField label="Şehir">
-              <input
-                type="text"
-                value={manualCity}
-                onChange={(event) => setManualCity(event.target.value)}
-                placeholder="Örn: İstanbul"
-                className="input-pop"
-              />
-            </SelectField>
+              <Field label="Ülke">
+                <select value={country} disabled className="input-pop">
+                  <option value="Türkiye">Türkiye</option>
+                </select>
+              </Field>
 
-            <SelectField label="İlçe">
-              <input
-                type="text"
-                value={manualDistrict}
-                onChange={(event) => setManualDistrict(event.target.value)}
-                placeholder="Örn: Eyüpsultan"
-                className="input-pop"
-              />
-            </SelectField>
+              <Field label="Şehir">
+                <select
+                  value={city}
+                  onChange={(event) => handleCityChange(event.target.value)}
+                  className="input-pop"
+                >
+                  {provinces.map((province) => (
+                    <option key={province} value={province}>
+                      {province}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-            <SelectField label="Kategori">
-              <input
-                type="text"
-                value={manualCategory}
-                onChange={(event) => setManualCategory(event.target.value)}
-                placeholder="Örn: Çiçekçi"
-                className="input-pop"
-              />
-            </SelectField>
-          </div>
+              <Field label="İlçe">
+                <select
+                  value={district}
+                  onChange={(event) => setDistrict(event.target.value)}
+                  disabled={availableDistricts.length === 0}
+                  className="input-pop"
+                >
+                  {availableDistricts.length > 0 ? (
+                    availableDistricts.map((provinceDistrict) => (
+                      <option key={provinceDistrict} value={provinceDistrict}>
+                        {provinceDistrict}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">İlçe verisi yakında eklenecek</option>
+                  )}
+                </select>
+              </Field>
 
-          <textarea
-            value={manualData}
-            onChange={(event) => handleManualDataChange(event.target.value)}
-            placeholder="CSV veya JSON verinizi buraya yapıştırın"
-            className="input-pop min-h-40 leading-6"
-          />
+              <Field label="Kategori">
+                <select
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value)}
+                  className="input-pop"
+                >
+                  {businessCategories.map((businessCategory) => (
+                    <option key={businessCategory} value={businessCategory}>
+                      {businessCategory}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <label className="btn-secondary cursor-pointer">
-              CSV / JSON Dosyası Seç
-              <input
-                type="file"
-                multiple
-                accept=".csv,.json,text/csv,application/json"
-                onChange={handleManualFileUpload}
-                className="sr-only"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={(event) => saveManualImport(event)}
-              className="btn-primary"
-            >
-              Manuel Veriyi Kaydet
-            </button>
-          </div>
-
-          {selectedFileCount > 0 ? (
-            <p className="text-sm font-extrabold text-slate-600">
-              Seçilen dosya: {selectedFileCount}
-            </p>
-          ) : null}
-          {manualImportMessage ? (
-            <p className="w-fit rounded-full border-2 border-[#1E293B] bg-[#34D399] px-3 py-1 text-sm font-black text-[#1E293B]">
-              {manualImportMessage}
-            </p>
-          ) : null}
-          {parsedBusinesses.length > 0 ? (
-            <div className="grid gap-3 rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4">
-              <p className="text-sm font-black text-[#1E293B]">
-                Önizleme: {parsedBusinesses.length} işletme
-              </p>
-              <div className="grid gap-2">
-                {parsedBusinesses.slice(0, 3).map((business) => (
-                  <div
-                    key={`${business.businessName}-${business.location}`}
-                    className="rounded-xl border-2 border-[#1E293B] bg-white p-3 text-sm font-bold"
-                  >
-                    <p className="font-black">{business.businessName}</p>
-                    <p className="text-slate-600">
-                      {business.category} · {business.rating.toFixed(1)} ·{" "}
-                      {business.reviewCount} yorum
-                    </p>
-                    <p className="text-slate-600">{business.location}</p>
-                  </div>
-                ))}
+              <div className="md:col-span-2">
+                <button type="submit" disabled={isLoading} className="btn-primary">
+                  {isLoading ? "Analiz ediliyor..." : "Analiz Et"}
+                </button>
               </div>
-            </div>
-          ) : null}
+            </form>
+          ) : (
+            <section className="grid gap-6 p-5">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">
+                  Manuel CSV / JSON yükle
+                </h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                  Şehir ve ilçe bilgileri rapor metadata’sı içindir. CSV/JSON içindeki
+                  işletme adresleri değiştirilmez.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Analiz adı">
+                  <input
+                    type="text"
+                    value={manualAnalysisName}
+                    onChange={(event) => setManualAnalysisName(event.target.value)}
+                    placeholder="Örn: Eyüpsultan Çiçekçiler - Temmuz"
+                    className="input-pop"
+                  />
+                </Field>
+
+                <Field label="Kategori">
+                  <input
+                    type="text"
+                    value={manualCategory}
+                    onChange={(event) => setManualCategory(event.target.value)}
+                    placeholder="Örn: Çiçekçi"
+                    className="input-pop"
+                  />
+                </Field>
+
+                <Field label="Şehir">
+                  <input
+                    type="text"
+                    value={manualCity}
+                    onChange={(event) => setManualCity(event.target.value)}
+                    placeholder="Örn: İstanbul"
+                    className="input-pop"
+                  />
+                </Field>
+
+                <Field label="İlçe">
+                  <input
+                    type="text"
+                    value={manualDistrict}
+                    onChange={(event) => setManualDistrict(event.target.value)}
+                    placeholder="Örn: Eyüpsultan"
+                    className="input-pop"
+                  />
+                </Field>
+              </div>
+
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950">
+                      CSV/JSON dosyası seçimi
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Çoklu dosya seçebilir, dosyaları tek analiz altında birleştirebilirsiniz.
+                    </p>
+                  </div>
+                  <label className="btn-secondary cursor-pointer">
+                    Dosya Seç
+                    <input
+                      type="file"
+                      multiple
+                      accept=".csv,.json,text/csv,application/json"
+                      onChange={handleManualFileUpload}
+                      className="sr-only"
+                    />
+                  </label>
+                </div>
+
+                {selectedFileNames.length > 0 ? (
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
+                    <p className="text-sm font-medium text-slate-700">
+                      Seçilen dosya sayısı: {selectedFileNames.length}
+                    </p>
+                    <ul className="mt-2 grid gap-1 text-sm text-slate-600">
+                      {selectedFileNames.map((fileName) => (
+                        <li key={fileName} className="truncate">
+                          {fileName}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+
+              <Field label="Metin yapıştırma alanı">
+                <textarea
+                  value={manualData}
+                  onChange={(event) => handleManualDataChange(event.target.value)}
+                  placeholder="CSV veya JSON verinizi buraya yapıştırın"
+                  className="input-pop min-h-44 leading-6"
+                />
+              </Field>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handlePreviewManualData}
+                  disabled={!manualData.trim()}
+                  className="btn-secondary"
+                >
+                  Önizleme Oluştur
+                </button>
+                <button type="button" onClick={saveManualImport} className="btn-primary">
+                  Manuel Veriyi Kaydet
+                </button>
+              </div>
+
+              {manualImportMessage ? (
+                <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
+                  {manualImportMessage}
+                </p>
+              ) : null}
+
+              {parsedBusinesses.length > 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-semibold text-slate-950">
+                      Önizleme
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      {parsedBusinesses.length} işletme parse edildi, ilk 3 kayıt gösteriliyor.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 hidden overflow-hidden rounded-lg border border-slate-200 md:block">
+                    <table className="table-pop">
+                      <thead>
+                        <tr>
+                          <th className="text-left">İşletme</th>
+                          <th className="text-left">Puan</th>
+                          <th className="text-left">Yorum</th>
+                          <th className="text-left">Konum</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsedBusinesses.slice(0, 3).map((business) => (
+                          <tr key={`${business.businessName}-${business.location}`}>
+                            <td className="font-medium text-slate-950">
+                              {business.businessName}
+                            </td>
+                            <td>{business.rating.toFixed(1)}</td>
+                            <td>{business.reviewCount}</td>
+                            <td className="max-w-lg text-sm text-slate-600">
+                              {business.location || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:hidden">
+                    {parsedBusinesses.slice(0, 3).map((business) => (
+                      <article
+                        key={`${business.businessName}-${business.location}`}
+                        className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                      >
+                        <p className="font-semibold text-slate-950">
+                          {business.businessName}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Puan: {business.rating.toFixed(1)} • Yorum:{" "}
+                          {business.reviewCount}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {business.location || "-"}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          )}
         </section>
 
         {errorMessage ? (
-          <section className="card-pop border-[#B91C1C] bg-[#FFE4E6] p-4">
-            <p className="text-sm font-extrabold text-[#7F1D1D]">{errorMessage}</p>
+          <section className="rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-sm font-medium text-red-700">{errorMessage}</p>
           </section>
         ) : null}
 
         {isLoading ? (
-          <section className="card-pop bg-[#F5F3FF] p-6">
-            <p className="text-sm font-extrabold text-[#1E293B]">
-              Test işletme listesi hazırlanıyor...
+          <section className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <p className="text-sm font-medium text-blue-700">
+              İşletme listesi hazırlanıyor...
             </p>
           </section>
         ) : null}
@@ -683,17 +825,20 @@ export default function NewAnalysisPage() {
   );
 }
 
-function SelectField({
+function Field({
   label,
+  helper,
   children,
 }: {
   label: string;
+  helper?: string;
   children: ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-2">
-      <span className="text-sm font-black text-[#1E293B]">{label}</span>
+    <label className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
       {children}
+      {helper ? <span className="text-xs text-slate-500">{helper}</span> : null}
     </label>
   );
 }

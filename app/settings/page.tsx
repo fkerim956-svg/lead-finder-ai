@@ -45,97 +45,144 @@ export default function SettingsPage() {
     };
   }, []);
 
+  const status = systemStatus ?? fallbackSystemStatus;
+  const googleApiLabel = systemStatus
+    ? status.googleApiConfigured
+      ? "Hazır"
+      : "Yapılandırılmadı"
+    : "Kontrol ediliyor";
+
   return (
     <AppShell>
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
-        <header>
-          <p className="page-eyebrow">Ayarlar</p>
-          <h1 className="page-title mt-5">Uygulama ayarları</h1>
-          <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
-            Google API yapılandırması ve uygulama durumu burada izlenir. API
-            anahtarı güvenlik için tarayıcıda değil, sunucu ortamında tutulur.
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
+        <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+            Ayarlar
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Sistem bağlantılarını, veri kaynağını ve uygulama saklama davranışını
+            güvenli şekilde takip edin.
           </p>
         </header>
 
-        <section className="card-pop overflow-hidden">
-          <div className="border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4">
-            <h2 className="font-heading text-xl font-black text-[#1E293B]">
-              Google API Ayarları
-            </h2>
-            <p className="mt-1 text-sm font-bold text-[#1E293B]">
-              Google API anahtarı güvenlik için .env.local içinde tutulmalıdır.
-            </p>
-          </div>
+        <section className="grid gap-4 md:grid-cols-3">
+          <StatusCard
+            label="Google API"
+            value={googleApiLabel}
+            tone={status.googleApiConfigured ? "success" : "warning"}
+          />
+          <StatusCard
+            label="Veri Kaynağı"
+            value={status.googleApiConfigured ? "Google / Demo fallback" : "Demo / Manuel Veri Modu"}
+            tone="neutral"
+          />
+          <StatusCard label="Sürüm" value={status.version} tone="neutral" />
+        </section>
 
-          <div className="p-5">
-            <div className="rounded-2xl border-2 border-[#1E293B] bg-[#F5F3FF] px-4 py-3">
-              <p className="text-xs font-black uppercase text-slate-500">
+        <section className="grid gap-4 lg:grid-cols-2">
+          <InfoPanel title="Sistem Durumu">
+            <dl className="grid gap-3">
+              <InfoRow label="Google API" value={googleApiLabel} />
+              <InfoRow
+                label="Veri modu"
+                value={status.googleApiConfigured ? "API hazır, demo fallback aktif" : "Demo / Manuel Veri Modu"}
+              />
+              <InfoRow label="Uygulama sürümü" value={status.version} />
+            </dl>
+          </InfoPanel>
+
+          <InfoPanel title="Google API / Veri Kaynağı">
+            <p className="text-sm leading-6 text-slate-600">
+              Google Places API anahtarı güvenlik için sunucu ortamında tutulmalıdır.
+              Bu ekranda API key gösterilmez ve tarayıcıya yazılmaz.
+            </p>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Ortam değişkeni
               </p>
-              <p className="mt-2 font-mono text-sm font-black text-[#1E293B]">
+              <p className="mt-1 font-mono text-sm font-semibold text-slate-800">
                 GOOGLE_PLACES_API_KEY
               </p>
             </div>
-          </div>
-        </section>
+          </InfoPanel>
 
-        <SystemStatusSection systemStatus={systemStatus} />
+          <InfoPanel title="Veri Saklama">
+            <p className="text-sm leading-6 text-slate-600">
+              Veriler şu anda bu tarayıcıda saklanır. Farklı bir cihazda otomatik
+              olarak görünmez.
+            </p>
+            <ul className="mt-4 grid gap-2 text-sm text-slate-600">
+              <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                Analiz geçmişi, favoriler, aboneler ve muhasebe kayıtları localStorage
+                üzerinde tutulur.
+              </li>
+              <li className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                Şu aşamada cloud sync veya merkezi database bağlantısı yoktur.
+              </li>
+            </ul>
+          </InfoPanel>
+
+          <InfoPanel title="Uygulama Bilgisi">
+            <dl className="grid gap-3">
+              <InfoRow label="Ürün" value="Lead Finder AI" />
+              <InfoRow label="Aşama" value="MVP" />
+              <InfoRow label="Güvenli secret yönetimi" value="Sunucu ortam değişkeni" />
+            </dl>
+          </InfoPanel>
+        </section>
       </div>
     </AppShell>
   );
 }
 
-function SystemStatusSection({
-  systemStatus,
+function StatusCard({
+  label,
+  value,
+  tone,
 }: {
-  systemStatus: SystemStatus | null;
+  label: string;
+  value: string;
+  tone: "success" | "warning" | "neutral";
 }) {
-  const status = systemStatus ?? fallbackSystemStatus;
+  const toneClass =
+    tone === "success"
+      ? "border-green-200 bg-green-50 text-green-700"
+      : tone === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-white text-slate-700";
 
   return (
-    <section className="card-pop overflow-hidden">
-      <div className="border-b-2 border-[#1E293B] bg-[#34D399] px-5 py-4">
-        <h2 className="font-heading text-xl font-black text-[#1E293B]">
-          Uygulama Durumu
-        </h2>
-      </div>
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <p
+        className={`mt-3 inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${toneClass}`}
+      >
+        {value}
+      </p>
+    </article>
+  );
+}
 
-      <dl className="grid gap-4 p-5 sm:grid-cols-3">
-        <StatusItem
-          label="Google API"
-          value={
-            systemStatus
-              ? status.googleApiConfigured
-                ? "Hazır"
-                : "Bağlı değil"
-              : "Kontrol ediliyor"
-          }
-          active={Boolean(systemStatus?.googleApiConfigured)}
-        />
-        <StatusItem label="Veri Kaynağı" value={status.dataSource} active />
-        <StatusItem label="Sürüm" value={status.version} active />
-      </dl>
+function InfoPanel({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-base font-semibold text-slate-950">{title}</h2>
+      <div className="mt-4">{children}</div>
     </section>
   );
 }
 
-function StatusItem({
-  label,
-  value,
-  active,
-}: {
-  label: string;
-  value: string;
-  active: boolean;
-}) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border-2 border-[#1E293B] bg-white p-4">
-      <dt className="text-xs font-black uppercase text-slate-500">{label}</dt>
-      <dd className="mt-3">
-        <span className={`badge-pop ${active ? "bg-[#34D399]" : "bg-[#FBBF24]"}`}>
-          {value}
-        </span>
-      </dd>
+    <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <dt className="text-sm font-medium text-slate-500">{label}</dt>
+      <dd className="text-sm font-semibold text-slate-900">{value}</dd>
     </div>
   );
 }

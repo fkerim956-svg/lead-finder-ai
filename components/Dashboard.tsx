@@ -65,7 +65,7 @@ function getAnalysisTitle(analysis: AnalysisHistoryItem): string {
   return analysis.analysisName?.trim() || fallbackName || analysis.category || "İsimsiz Analiz";
 }
 
-function getAnalysisMetaLine(analysis: AnalysisHistoryItem): string {
+function getLocationCategoryLine(analysis: AnalysisHistoryItem): string {
   const location = [analysis.city, analysis.district]
     .map((value) => value?.trim())
     .filter(Boolean)
@@ -112,6 +112,7 @@ export default function Dashboard() {
   const [subscriberCount] = useState(() =>
     getStoredBusinessCount(REVIEW_CARD_SUBSCRIBERS_STORAGE_KEY),
   );
+
   const totalBusinesses = history.reduce(
     (total, analysis) => total + analysis.businesses.length,
     0,
@@ -145,26 +146,10 @@ export default function Dashboard() {
     visibleAnalysisIds.length > 0 && selectedVisibleCount === visibleAnalysisIds.length;
 
   const stats = [
-    {
-      label: "Toplam Analiz",
-      value: String(history.length),
-      accent: "bg-[#FBBF24]",
-    },
-    {
-      label: "Bulunan İşletme",
-      value: String(totalBusinesses),
-      accent: "bg-[#34D399]",
-    },
-    {
-      label: "Favoriler",
-      value: String(favoritesCount),
-      accent: "bg-[#F472B6]",
-    },
-    {
-      label: "Yorum Kart Aboneleri",
-      value: String(subscriberCount),
-      accent: "bg-[#EDE9FE]",
-    },
+    { label: "Toplam Analiz", value: history.length },
+    { label: "Toplam İşletme", value: totalBusinesses },
+    { label: "Favoriler", value: favoritesCount },
+    { label: "Yorum Kart Aboneleri", value: subscriberCount },
   ];
 
   function refreshHistory(nextHistory: AnalysisHistoryItem[]) {
@@ -192,14 +177,12 @@ export default function Dashboard() {
   }
 
   function handleDeleteSelected() {
-    const count = selectedAnalysisIds.length;
-
-    if (count === 0) {
+    if (selectedAnalysisIds.length === 0) {
       return;
     }
 
     const confirmed = window.confirm(
-      `${count} analiz geçmişten silinecek. Favoriler, Aboneler ve Muhasebe kayıtları korunacak. Devam edilsin mi?`,
+      `${selectedAnalysisIds.length} analiz geçmişten silinecek. Favoriler, Aboneler ve Muhasebe kayıtları korunacak. Devam edilsin mi?`,
     );
 
     if (!confirmed) {
@@ -247,6 +230,10 @@ export default function Dashboard() {
     });
   }
 
+  function handleClearSelection() {
+    setSelectedAnalysisIds([]);
+  }
+
   function handleStartEdit(analysis: AnalysisHistoryItem) {
     setEditingAnalysis({
       id: analysis.id,
@@ -283,19 +270,18 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8 sm:px-6 lg:py-10">
-      <header className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-start">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
+      <header className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="page-eyebrow">Panel</p>
-          <h1 className="page-title mt-5">Lead Finder AI</h1>
-          <p className="muted-text mt-4 max-w-2xl text-base font-medium leading-7">
-            Analiz geçmişi, favoriler ve satış aksiyonları tek yerde. Yeni Google
-            Maps analizleri ve manuel yüklenen veriler burada kalıcı olarak
-            listelenir.
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+            Dashboard
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Analizlerinizi yönetin ve son raporlarınıza hızlıca ulaşın.
           </p>
         </div>
 
-        <div className="card-pop flex flex-col gap-3 bg-white p-4 sm:flex-row">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Link href="/new-analysis" className="btn-primary">
             Yeni Analiz
           </Link>
@@ -305,200 +291,274 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat, index) => (
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) => (
           <article
             key={stat.label}
-            className="card-pop relative overflow-hidden p-5 transition motion-safe:hover:-translate-y-1"
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
           >
-            <div
-              className={`absolute -right-5 -top-5 h-20 w-20 rounded-[28px] border-2 border-[#1E293B] ${stat.accent} rotate-12`}
-            />
-            <p className="relative text-sm font-extrabold text-slate-600">
-              {stat.label}
-            </p>
-            <p className="relative mt-4 font-heading text-5xl font-black text-[#1E293B]">
+            <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-950">
               {stat.value}
             </p>
-            <span className="badge-pop relative mt-4 bg-[#FBBF24]">
-              0{index + 1}
-            </span>
           </article>
         ))}
       </section>
 
-      <section className="card-pop overflow-hidden">
-        <div className="flex flex-col gap-3 border-b-2 border-[#1E293B] bg-[#FBBF24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-heading text-xl font-black text-[#1E293B]">
-              Son Analizler
-            </h2>
-            <p className="mt-1 text-sm font-semibold text-[#1E293B]">
-              Google API demo sonuçları ve manuel yüklenen veriler burada
-              tutulur.
-            </p>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">
+                Son Analizler
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Kayıtlı raporlarınızı arayın, açın, düzenleyin veya güvenli şekilde silin.
+              </p>
+            </div>
+
+            {history.length > 0 ? (
+              <div className="flex flex-col gap-3 lg:min-w-[360px]">
+                <label className="grid gap-1.5">
+                  <span className="text-sm font-medium text-slate-700">
+                    Analizlerde ara
+                  </span>
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Üsküdar, cafe, web tasarım..."
+                    className="input-pop"
+                  />
+                </label>
+              </div>
+            ) : null}
           </div>
         </div>
 
         {history.length > 0 ? (
-          <div className="grid gap-4 border-b-2 border-[#1E293B] bg-[#FFFDF5] p-5">
-            <label className="flex flex-col gap-2">
-              <span className="text-sm font-black text-[#1E293B]">
-                Analizlerde ara
+          <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleVisibleSelection}
+                className="btn-secondary"
+              >
+                {allVisibleSelected ? "Görünür Seçimi Kaldır" : "Görünürleri Seç"}
+              </button>
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                disabled={selectedAnalysisIds.length === 0}
+                className="btn-secondary"
+              >
+                Seçimi Kaldır
+              </button>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600">
+                Seçilen: {selectedAnalysisIds.length}
               </span>
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Üsküdar, cafe, web tasarım..."
-                className="input-pop"
-              />
-            </label>
+            </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <label className="flex min-h-11 items-center gap-3 text-sm font-black text-[#1E293B]">
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  onChange={handleToggleVisibleSelection}
-                  className="h-5 w-5 accent-[#8B5CF6]"
-                />
-                Tümünü Seç
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <span className="badge-pop bg-white">
-                  Seçilen: {selectedAnalysisIds.length}
-                </span>
-                {selectedAnalysisIds.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={handleDeleteSelected}
-                    className="btn-danger"
-                  >
-                    Seçilenleri Sil ({selectedAnalysisIds.length})
-                  </button>
-                ) : null}
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={selectedAnalysisIds.length === 0}
+                className="btn-danger"
+              >
+                Seçilenleri Sil
+              </button>
+              <button type="button" onClick={handleClearHistory} className="btn-danger">
+                Tüm Geçmişi Temizle
+              </button>
             </div>
           </div>
         ) : null}
 
         {history.length === 0 ? (
           <div className="p-5">
-            <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
-              Henüz kayıtlı analiz yok.
-            </p>
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+              Henüz kayıtlı analiz yok. Yeni analiz oluşturduğunuzda burada görünecek.
+            </div>
           </div>
         ) : filteredHistory.length === 0 ? (
           <div className="p-5">
-            <p className="rounded-2xl border-2 border-[#1E293B] bg-[#FFFDF5] p-4 text-sm font-extrabold text-[#1E293B]">
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
               Aramanızla eşleşen analiz bulunamadı.
-            </p>
+            </div>
           </div>
         ) : (
-          <div className="grid gap-4 p-4">
-            {filteredHistory.map((analysis) => {
-              const metaLine = getAnalysisMetaLine(analysis);
-              const isSelected = selectedAnalysisIds.includes(analysis.id);
+          <>
+            <div className="hidden lg:block">
+              <table className="table-pop">
+                <thead>
+                  <tr>
+                    <th className="w-12 text-left">Seçim</th>
+                    <th className="text-left">Analiz</th>
+                    <th className="text-left">Mod</th>
+                    <th className="text-left">Konum / Kategori</th>
+                    <th className="text-left">İşletme</th>
+                    <th className="text-left">Tarih</th>
+                    <th className="text-right">Aksiyonlar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.map((analysis) => {
+                    const isSelected = selectedAnalysisIds.includes(analysis.id);
 
-              return (
-                <article
-                  key={analysis.id}
-                  className="rounded-[24px] border-2 border-[#1E293B] bg-white p-4 shadow-[4px_4px_0_#1E293B]"
-                >
-                  <div className="grid gap-4 lg:grid-cols-[auto_1fr_auto] lg:items-center">
-                    <label className="flex min-h-11 items-center gap-3 text-sm font-black text-[#1E293B]">
+                    return (
+                      <tr key={analysis.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleAnalysis(analysis.id)}
+                            aria-label={`${getAnalysisTitle(analysis)} seç`}
+                            className="h-4 w-4 accent-blue-600"
+                          />
+                        </td>
+                        <td>
+                          <p className="font-semibold text-slate-950">
+                            {getAnalysisTitle(analysis)}
+                          </p>
+                        </td>
+                        <td>
+                          <span className="badge-pop border-blue-100 bg-blue-50 text-blue-700">
+                            {getIntentLabel(analysis.selectedIntent)}
+                          </span>
+                        </td>
+                        <td className="max-w-sm text-sm text-slate-600">
+                          {getLocationCategoryLine(analysis) || "-"}
+                        </td>
+                        <td className="text-sm font-medium text-slate-700">
+                          {analysis.businesses.length}
+                        </td>
+                        <td className="text-sm text-slate-600">
+                          {formatAnalysisDate(analysis.createdAt)}
+                        </td>
+                        <td>
+                          <div className="flex justify-end gap-2 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAnalysis(analysis)}
+                              className="btn-secondary"
+                            >
+                              Aç
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEdit(analysis)}
+                              className="btn-secondary"
+                            >
+                              Düzenle
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAnalysis(analysis.id)}
+                              className="btn-danger"
+                            >
+                              Sil
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid gap-3 p-4 lg:hidden">
+              {filteredHistory.map((analysis) => {
+                const isSelected = selectedAnalysisIds.includes(analysis.id);
+
+                return (
+                  <article
+                    key={analysis.id}
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-base font-semibold text-slate-950">
+                          {getAnalysisTitle(analysis)}
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {getLocationCategoryLine(analysis) || "-"}
+                        </p>
+                      </div>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleToggleAnalysis(analysis.id)}
-                        className="h-5 w-5 accent-[#8B5CF6]"
+                        aria-label={`${getAnalysisTitle(analysis)} seç`}
+                        className="mt-1 h-5 w-5 shrink-0 accent-blue-600"
                       />
-                      Seç
-                    </label>
-
-                    <div>
-                      <h3 className="font-heading text-2xl font-black text-[#1E293B]">
-                        {getAnalysisTitle(analysis)}
-                      </h3>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="badge-pop bg-[#F5F3FF]">
-                          {formatAnalysisDate(analysis.createdAt)}
-                        </span>
-                        <span className="badge-pop bg-[#34D399]">
-                          {getIntentLabel(analysis.selectedIntent)}
-                        </span>
-                        {metaLine ? (
-                          <span className="badge-pop bg-white">{metaLine}</span>
-                        ) : null}
-                        <span className="badge-pop bg-[#EDE9FE]">
-                          {analysis.businesses.length} işletme
-                        </span>
-                      </div>
                     </div>
 
-                    <div className="flex flex-col gap-2 sm:flex-row">
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      <span className="badge-pop border-blue-100 bg-blue-50 text-blue-700">
+                        {getIntentLabel(analysis.selectedIntent)}
+                      </span>
+                      <span className="badge-pop">{analysis.businesses.length} işletme</span>
+                      <span className="badge-pop">
+                        {formatAnalysisDate(analysis.createdAt)}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAnalysis(analysis)}
+                        className="btn-secondary"
+                      >
+                        Aç
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleStartEdit(analysis)}
                         className="btn-secondary"
                       >
-                        Analizi Düzenle
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAnalysis(analysis)}
-                        className="btn-primary"
-                      >
-                        Sonuçları Aç
+                        Düzenle
                       </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveAnalysis(analysis.id)}
                         className="btn-danger"
                       >
-                        Analizi Sil
+                        Sil
                       </button>
                     </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
         )}
-
-        {history.length > 0 ? (
-          <div className="border-t-2 border-[#1E293B] bg-[#FFFDF5] p-5">
-            <button type="button" onClick={handleClearHistory} className="btn-danger">
-              Tüm Analiz Geçmişini Temizle
-            </button>
-          </div>
-        ) : null}
       </section>
 
       {editingAnalysis ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[#1E293B]/35 px-4 py-6">
-          <section className="card-pop max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-white p-5">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 py-6">
+          <section className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="page-eyebrow">Analiz Yönetimi</p>
-                <h2 className="mt-3 font-heading text-3xl font-black text-[#1E293B]">
+                <p className="text-sm font-medium text-slate-500">Analiz Yönetimi</p>
+                <h2 className="mt-1 text-xl font-semibold text-slate-950">
                   Analizi Düzenle
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingAnalysis(null)}
-                className="btn-ghost min-h-11"
-                aria-label="Vazgeç"
+                className="btn-ghost"
+                aria-label="Kapat"
               >
                 Kapat
               </button>
             </div>
 
             <div className="mt-5 grid gap-4">
-              <label className="grid gap-2">
-                <span className="text-sm font-black text-[#1E293B]">
+              <label className="grid gap-1.5">
+                <span className="text-sm font-medium text-slate-700">
                   Analiz adı
                 </span>
                 <input
@@ -516,10 +576,8 @@ export default function Dashboard() {
               </label>
 
               <div className="grid gap-4 md:grid-cols-3">
-                <label className="grid gap-2">
-                  <span className="text-sm font-black text-[#1E293B]">
-                    Şehir
-                  </span>
+                <label className="grid gap-1.5">
+                  <span className="text-sm font-medium text-slate-700">Şehir</span>
                   <input
                     type="text"
                     value={editingAnalysis.city}
@@ -532,8 +590,8 @@ export default function Dashboard() {
                   />
                 </label>
 
-                <label className="grid gap-2">
-                  <span className="text-sm font-black text-[#1E293B]">İlçe</span>
+                <label className="grid gap-1.5">
+                  <span className="text-sm font-medium text-slate-700">İlçe</span>
                   <input
                     type="text"
                     value={editingAnalysis.district}
@@ -548,8 +606,8 @@ export default function Dashboard() {
                   />
                 </label>
 
-                <label className="grid gap-2">
-                  <span className="text-sm font-black text-[#1E293B]">
+                <label className="grid gap-1.5">
+                  <span className="text-sm font-medium text-slate-700">
                     Kategori
                   </span>
                   <input
@@ -569,21 +627,21 @@ export default function Dashboard() {
             </div>
 
             {editError ? (
-              <p className="mt-4 rounded-2xl border-2 border-[#1E293B] bg-[#FFE4E6] p-3 text-sm font-black text-[#7F1D1D]">
+              <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
                 {editError}
               </p>
             ) : null}
 
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <button type="button" onClick={handleSaveEdit} className="btn-primary">
-                Değişiklikleri Kaydet
-              </button>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={() => setEditingAnalysis(null)}
                 className="btn-secondary"
               >
-                Vazgeç
+                İptal
+              </button>
+              <button type="button" onClick={handleSaveEdit} className="btn-primary">
+                Kaydet
               </button>
             </div>
           </section>
